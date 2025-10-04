@@ -7,6 +7,9 @@ from groq import Groq
 import os
 from dotenv import load_dotenv
 import os
+app = Flask(__name__)
+CORS(app)  
+
 
 load_dotenv()  # Add this at the top
 
@@ -15,7 +18,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Initialize Groq client (get free API key from console.groq.com)
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", "your_api_key_here"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", "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"))
 
 # Load your trained model (you'll add this later)
 # model = joblib.load('models/random_forest.pkl')

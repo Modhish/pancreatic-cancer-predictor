@@ -1,0 +1,6 @@
+flask
+flask-cors
+numpy
+groq==0.8.0
+httpx==0.24.1
+python-dotenv
