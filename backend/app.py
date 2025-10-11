@@ -81,7 +81,6 @@ def get_ai_explanation(prediction, probability, shap_values, patient_data):
 
 Ответь на русском языке, будь точным и профессиональным."""
 
-    try:
         response = groq_client.chat.completions.create(
             model="llama-3.1-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
