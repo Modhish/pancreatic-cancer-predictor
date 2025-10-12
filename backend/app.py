@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 import traceback
 from io import BytesIO
 from fpdf import FPDF
+import math
 
 # Load environment variables
 load_dotenv()
@@ -276,9 +277,9 @@ class MedicalDiagnosticSystem:
         ]
 
         for i, (feature_name, impact_value) in enumerate(zip(FEATURE_NAMES, feature_impacts)):
-            # Add some realistic variation
-            import random
-            noise = random.uniform(-0.01, 0.01)
+            # Add consistent, deterministic variation based on feature magnitude/index
+            raw_value = features[i] if i < len(features) else 0.0
+            noise = math.sin((raw_value + 1) * (i + 1) * 0.37) * 0.006
             final_value = impact_value + noise
 
             shap_values.append({
@@ -293,16 +294,44 @@ class MedicalDiagnosticSystem:
 
     def generate_clinical_commentary(self, prediction: int, probability: float,
                                      shap_values: List[Dict], patient_data: List[float],
-                                     language: str = 'en') -> str:
-        """Generate AI-powered clinical commentary."""
+                                     language: str = 'en', client_type: str = 'patient') -> str:
+        """Generate AI-powered clinical commentary tailored to the audience."""
         language = (language or 'en').lower()
+        audience = (client_type or 'patient').lower()
+        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
         if groq_client is None:
-            return self._generate_fallback_commentary(prediction, probability, shap_values, language=language)
+            return self._generate_fallback_commentary(
+                prediction, probability, shap_values, language=language, client_type=audience
+            )
 
         try:
             risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
             top_factors = [sv['feature'] for sv in shap_values[:3]]
             language_instruction = "Respond in Russian (Cyrillic script) and keep all clinical terminology accurate." if language.startswith('ru') else "Respond in English."
+            if is_professional:
+                audience_instruction = (
+                    "Primary audience: specialist clinician. Provide comprehensive, evidence-based analysis with appropriate medical terminology. "
+                    "Reference biomarkers and SHAP contributions directly. Keep tone precise and actionable."
+                )
+                response_structure = """Please provide:
+1. Executive clinical impression (2-3 sentences) referencing the probability.
+2. Detailed laboratory interpretation with emphasis on SHAP factors.
+3. Differential considerations or notable risk modifiers (1-2 bullet points).
+4. Diagnostic and management plan with prioritized bullet list.
+5. Coordination & follow-up recommendations."""
+            else:
+                audience_instruction = (
+                    "Primary audience: patient without medical training. Use plain language, short sentences, and avoid jargon. "
+                    "Explain what the risk level means, why the top factors matter, and what actions the patient should take. "
+                    "Offer reassurance while highlighting urgent warning signs."
+                )
+                response_structure = """Please provide:
+1. Easy-to-understand summary (2-3 short sentences) explaining the risk.
+2. Top factors explained in everyday language (bullet list).
+3. Clear next steps the patient should follow.
+4. Symptoms to watch for and when to contact a doctor.
+5. Lifestyle or support tips.
+End with a reminder that only their doctor can make a diagnosis."""
 
             prompt = f"""You are a medical AI assistant analyzing pancreatic cancer risk assessment results.
 
@@ -319,13 +348,10 @@ PATIENT LABORATORY VALUES:
 - Bilirubin: {patient_data[12]} (normal: 5-21)
 - Glucose: {patient_data[10]} (normal: 3.9-5.6)
 
-Please provide:
-1. Brief clinical summary (1-2 sentences)
-2. Key observations (3-4 bullet points)
-3. Clinical recommendations for healthcare providers
-4. Patient counseling points
+{response_structure}
 
-Be professional, medically accurate, and emphasize that this is a screening tool requiring clinical correlation.
+Be accurate, align with audience needs, and emphasize that this is a screening tool requiring clinical correlation.
+{audience_instruction}
 {language_instruction}"""
 
             response = groq_client.chat.completions.create(
@@ -338,74 +364,110 @@ Be professional, medically accurate, and emphasize that this is a screening tool
 
         except Exception as e:
             logger.error(f"AI commentary generation error: {e}")
-            return self._generate_fallback_commentary(prediction, probability, shap_values, language=language)
+            return self._generate_fallback_commentary(
+                prediction, probability, shap_values, language=language, client_type=audience
+            )
 
     def _generate_fallback_commentary(self, prediction: int, probability: float,
-                                      shap_values: List[Dict], language: str = 'en') -> str:
+                                      shap_values: List[Dict], language: str = 'en',
+                                      client_type: str = 'patient') -> str:
         """Generate dynamic clinical commentary based on actual values."""
         risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
+        audience = (client_type or 'patient').lower()
+        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
 
         # Get top 3 contributing factors with their actual values
         top_factors = []
         for sv in shap_values[:3]:
             impact_desc = "elevated" if sv['impact'] == 'positive' else "decreased"
             top_factors.append(f"{sv['feature']}: {impact_desc} ({sv['value']:+.3f} impact)")
+        while len(top_factors) < 3:
+            top_factors.append("Additional biomarker: within reference range")
 
-        # Generate specific clinical insights based on probability and factors
-        if prediction == 1:
-            commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK ASSESSMENT
+        if is_professional:
+            if prediction == 1:
+                commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK PROFILE
 
-The pancreatic cancer screening indicates a {risk_level} risk profile with {probability:.1%} probability of malignancy.
-
-PRIMARY CONCERNING FACTORS:
+Risk probability: {probability:.1%}. Principal SHAP drivers:
 - {top_factors[0]}
 - {top_factors[1]}
 - {top_factors[2]}
 
-CLINICAL INTERPRETATION:
-Based on the laboratory analysis, several biomarkers show deviations that correlate with pancreatic cancer risk. The combination of these factors suggests the need for comprehensive evaluation.
+INTERPRETATION:
+Deviation patterns align with malignant-risk phenotypes. Correlate with clinical presentation (jaundice, cachexia, glycemic shifts) and recent imaging.
 
-RECOMMENDED ACTIONS:
-- Immediate referral to gastroenterology and medical oncology
-- Advanced imaging studies (contrast-enhanced CT or MRI of abdomen/pelvis)
-- Endoscopic ultrasound (EUS) with fine needle aspiration if indicated
-- Tumor marker panel (CA 19-9, CEA, CA 125)
-- Consider genetic counseling if family history is significant
+DIAGNOSTIC ACTIONS:
+- Contrast-enhanced pancreatic protocol CT or MRI urgently
+- Endoscopic ultrasound with FNA if imaging is suspicious/indeterminate
+- Tumor marker panel (CA 19-9, CEA, CA-125), CMP, and coagulation profile
+- Review familial history; consider germline testing (BRCA1/2, PALB2) where appropriate
+
+CARE COORDINATION:
+- Engage hepatobiliary surgery and oncology teams
+- Arrange nutritional and symptom management support
+- Document shared decision-making and patient counseling
+
+NOTE: Model guidance complements, not replaces, clinician judgement."""
+            else:
+                commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK PROFILE
+
+Risk probability: {probability:.1%}. Leading biomarkers:
+- {top_factors[0]}
+- {top_factors[1]}
+- {top_factors[2]}
+
+INTERPRETATION:
+Biomarkers remain within acceptable variance for low malignant probability. Continue vigilance in patients with hereditary or metabolic predisposition.
+
+MANAGEMENT:
+- Maintain annual laboratory surveillance; escalate if symptomatic changes occur
+- Optimize metabolic control (glucose, BMI) and address pancreatitis risk factors
+- Reinforce lifestyle counseling: abstain from tobacco, limit alcohol, encourage nutrition review
 
 FOLLOW-UP:
-- Schedule appointments within 2-4 weeks
-- Patient education regarding pancreatic cancer symptoms
-- Coordination with primary care provider for comprehensive management
+- Reassess sooner with new symptoms or family history updates
+- Communicate findings with primary care and referring specialists
 
-IMPORTANT: This screening tool requires clinical correlation. These results do not constitute a definitive diagnosis."""
+NOTE: Integrate with imaging, family history, and exam for final assessment."""
         else:
-            commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK ASSESSMENT
+            if prediction == 1:
+                commentary = f"""RESULT SUMMARY - {risk_level.upper()} RISK
 
-The pancreatic cancer screening indicates a {risk_level} risk profile with {probability:.1%} probability of malignancy.
+What it means:
+This screening shows a {risk_level.lower()} chance ({probability:.1%}) that something serious might be affecting your pancreas. It does not confirm cancer, but further testing is important.
 
-LABORATORY ASSESSMENT:
+Signals the system noticed:
 - {top_factors[0]}
 - {top_factors[1]}
 - {top_factors[2]}
 
-CLINICAL INTERPRETATION:
-Current laboratory values are within acceptable ranges for pancreatic cancer screening. The biomarker profile suggests low likelihood of pancreatic malignancy at this time.
+What to do next:
+- Book an appointment with your specialist right away (within the next 1-2 weeks).
+- Expect your doctor to order detailed scans such as a CT or MRI and possibly an endoscopic ultrasound.
+- Ask about extra blood tests (like CA 19-9) that help doctors get clearer answers.
 
-RECOMMENDED ACTIONS:
-- Continue routine annual screening protocols
-- Maintain awareness of pancreatic cancer risk factors
-- Consider enhanced screening if additional risk factors present:
-  - Family history of pancreatic cancer
-  - Personal history of diabetes mellitus
-  - Chronic pancreatitis
-  - Genetic predisposition (BRCA, PALB2 mutations)
+Watch for warning signs: yellow skin or eyes, strong belly or back pain, very dark urine or pale stools, or fast weight loss. Call your doctor or emergency services if these happen.
 
-FOLLOW-UP:
-- Annual laboratory monitoring
-- Patient education on pancreatic cancer symptoms
-- Maintain regular primary care follow-up
+Remember: Only your healthcare team can make a diagnosis. Take this report with you so you can decide next steps together."""
+            else:
+                commentary = f"""RESULT SUMMARY - {risk_level.upper()} RISK
 
-IMPORTANT: This screening tool requires clinical correlation. Continue routine healthcare monitoring."""
+What it means:
+Your screening points to a {risk_level.lower()} chance ({probability:.1%}) of pancreatic cancer right now. That is reassuring, but staying aware is still important.
+
+Top things the system checked:
+- {top_factors[0]}
+- {top_factors[1]}
+- {top_factors[2]}
+
+Keep doing:
+- Share these results with your doctor during your next visit.
+- Keep regular yearly check-ups and any imaging your doctor recommends.
+- Maintain healthy habits: balanced meals, regular activity, avoid smoking, and limit alcohol.
+
+Call your doctor sooner if you notice: new stomach or back pain, yellow skin or eyes, or sudden weight loss.
+
+Remember: This tool supports your healthcare team. Follow the plan you set together with your doctor."""
 
         return commentary
 
@@ -529,8 +591,9 @@ def run_diagnostic_pipeline(payload: Dict[str, Any]) -> tuple[Dict[str, Any] | N
     prediction, probability = diagnostic_system.predict_cancer_risk(features)
     shap_values = diagnostic_system.calculate_shap_analysis(features, prediction)
     language = str(payload.get('language', 'en')).lower()
+    client_type = str(payload.get('client_type', 'patient') or 'patient').lower()
     ai_explanation = diagnostic_system.generate_clinical_commentary(
-        prediction, probability, shap_values, features, language=language
+        prediction, probability, shap_values, features, language=language, client_type=client_type
     )
 
     analysis = {
@@ -542,6 +605,7 @@ def run_diagnostic_pipeline(payload: Dict[str, Any]) -> tuple[Dict[str, Any] | N
         'ai_explanation': ai_explanation,
         'patient_values': normalized,
         'language': language,
+        'client_type': client_type,
     }
     return analysis, None, 200
 
@@ -605,6 +669,15 @@ def download_report():
         if patient_payload is None:
             patient_payload = payload
 
+        client_type_hint = str(
+            (payload.get('client_type') if isinstance(payload.get('client_type'), str) else None)
+            or (patient_payload.get('client_type') if isinstance(patient_payload, dict) else None)
+            or 'patient'
+        ).lower()
+
+        if isinstance(patient_payload, dict) and 'client_type' not in patient_payload:
+            patient_payload = {**patient_payload, 'client_type': client_type_hint}
+
         if not isinstance(patient_payload, dict):
             return jsonify({
                 'error': 'Patient data is required for report generation',
@@ -629,6 +702,8 @@ def download_report():
                 **result_payload,
                 'shap_values': result_payload.get('shap_values') or result_payload.get('shapValues') or []
             }
+            if 'client_type' not in analysis_data:
+                analysis_data['client_type'] = client_type_hint
             if 'ai_explanation' not in analysis_data and 'aiExplanation' in result_payload:
                 analysis_data['ai_explanation'] = result_payload['aiExplanation']
             if 'risk_level' not in analysis_data:

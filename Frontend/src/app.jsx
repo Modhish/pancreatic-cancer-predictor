@@ -508,14 +508,67 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
         };
       })
       .filter((entry) => Number.isFinite(entry.value))
-      .sort((a, b) => b.importance - a.importance)
-      .slice(0, 6);
+        .sort((a, b) => b.importance - a.importance)
+        .slice(0, 8);
   }, [result]);
 
-  const shapMax = useMemo(() => {
-    if (!shapSummary.length) return 1;
-    return Math.max(...shapSummary.map((entry) => entry.importance)) || 1;
-  }, [shapSummary]);
+  const shapBaseline = useMemo(() => {
+    const candidate =
+      result?.base_value ??
+      result?.baseValue ??
+      result?.expected_value ??
+      result?.expectedValue ??
+      null;
+    return typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : null;
+  }, [result]);
+  const shapWaterfall = useMemo(() => {
+    if (!shapSummary.length) return null;
+
+    const totalContribution = shapSummary.reduce((sum, entry) => sum + entry.value, 0);
+    let baseline = shapBaseline;
+
+    if (baseline === null) {
+      const fx = typeof result?.probability === 'number' && Number.isFinite(result.probability)
+        ? result.probability
+        : null;
+      baseline = fx !== null ? fx - totalContribution : 0;
+    }
+
+    let running = baseline;
+    const steps = shapSummary.map((entry) => {
+      const start = running;
+      const end = running + entry.value;
+      running = end;
+      return { ...entry, start, end };
+    });
+
+    const finalValue = running;
+    const allValues = [
+      baseline,
+      finalValue,
+      ...steps.flatMap((step) => [step.start, step.end]),
+    ];
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+
+    return {
+      baseline,
+      finalValue,
+      steps,
+      min,
+      max,
+    };
+  }, [shapSummary, shapBaseline, result]);
+  const shapRange = shapWaterfall ? Math.max(shapWaterfall.max - shapWaterfall.min, 1e-6) : 1;
+  const shapFxDisplay =
+    typeof result?.probability === 'number' && Number.isFinite(result.probability)
+      ? result.probability
+      : shapWaterfall?.finalValue ?? null;
+  const shapPercent = (value) => {
+    if (!shapWaterfall) return 50;
+    const percent = ((value - shapWaterfall.min) / shapRange) * 100;
+    return Math.min(100, Math.max(0, percent));
+  };
 
   const aiExplanation = result?.ai_explanation || result?.aiExplanation || "";
 
@@ -684,27 +737,99 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
                     <p className="text-sm text-blue-700">
                       {result?.prediction === 0 ? t('result_low') : t('result_high')}
                     </p>
-                    {shapSummary.length > 0 ? (
-                      <div className="space-y-3 pt-2">
-                        <h5 className="text-sm font-semibold text-blue-700">{t('shap_title')}</h5>
-                        {shapSummary.map(({ feature, value, impact, importance }) => (
-                          <div key={feature}>
-                            <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                              <span>{feature.toUpperCase()}</span>
-                              <span className={impact === 'positive' ? 'text-blue-600' : 'text-rose-600'}>
-                                {value > 0 ? '+' : ''}{value.toFixed(3)}
+                      {shapSummary.length > 0 && shapWaterfall ? (
+                        <div className="space-y-4 pt-2">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+                              <BarChart3 className="h-4 w-4" />
+                              {t('shap_title')}
+                            </h5>
+                            <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <span className="h-2 w-3 rounded-full bg-rose-500" />
+                                <span>Red = Danger (risk ↑)</span>
                               </span>
-                            </div>
-                            <div className="mt-1 h-2 w-full rounded-full bg-blue-100">
-                              <div
-                                className={`h-full rounded-full ${impact === 'positive' ? 'bg-blue-500' : 'bg-rose-500'}`}
-                                style={{ width: `${Math.max((importance / shapMax) * 100, 6)}%` }}
-                              />
+                              <span className="flex items-center gap-1">
+                                <span className="h-2 w-3 rounded-full bg-blue-500" />
+                                <span>Blue = Protective (risk ↓)</span>
+                              </span>
+                              {shapFxDisplay !== null && (
+                                <span className="text-xs text-slate-600">
+                                  f(x) = <span className="font-semibold text-slate-800">{shapFxDisplay.toFixed(3)}</span>
+                                </span>
+                              )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
+                            <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                              <span className="text-right">Feature Impact</span>
+                              <span>Contribution Flow</span>
+                              <span className="text-right">Cumulative</span>
+                            </div>
+                            {shapWaterfall.steps.map((step) => {
+                              const isPositive = step.value >= 0;
+                              const barColor = isPositive ? 'bg-rose-500' : 'bg-blue-500';
+                              const textColor = isPositive ? 'text-rose-600' : 'text-blue-600';
+                              const startPercent = shapPercent(Math.min(step.start, step.end));
+                              const endPercent = shapPercent(Math.max(step.start, step.end));
+                              const widthPercent = Math.max(endPercent - startPercent, 1.5);
+                              const startMarker = shapPercent(step.start);
+                              const endMarker = shapPercent(step.end);
+                              const baselineMarker = shapPercent(shapWaterfall.baseline);
+                              return (
+                                <div
+                                  key={step.feature}
+                                  className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-xs"
+                                >
+                                  <span className="font-semibold text-slate-600 text-right whitespace-nowrap">
+                                    {`${step.value >= 0 ? '+' : ''}${step.value.toFixed(3)} = ${step.feature.toUpperCase()}`}
+                                  </span>
+                                  <div className="relative h-7 rounded-lg bg-slate-100">
+                                    <div
+                                      className="absolute inset-y-1 w-px bg-slate-300"
+                                      style={{ left: `${baselineMarker}%` }}
+                                    />
+                                    <div
+                                      className="absolute inset-y-2 w-px bg-slate-400/70"
+                                      style={{ left: `${startMarker}%` }}
+                                    />
+                                    <div
+                                      className="absolute inset-y-2 w-px bg-slate-400/70"
+                                      style={{ left: `${endMarker}%` }}
+                                    />
+                                    <div
+                                      className={`absolute top-1.5 bottom-1.5 rounded-md ${barColor}`}
+                                      style={{ left: `${startPercent}%`, width: `${widthPercent}%` }}
+                                    />
+                                    <div
+                                      className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
+                                      style={{ left: `${startMarker}%` }}
+                                    />
+                                    <div
+                                      className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
+                                      style={{ left: `${endMarker}%` }}
+                                    />
+                                  </div>
+                                  <span className={`font-semibold ${textColor}`}>
+                                    {step.end >= 0 ? '+' : ''}
+                                    {step.end.toFixed(3)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-col items-center gap-1 text-[11px] font-medium text-slate-500">
+                            <p>
+                              Model baseline E[f(X)] = {(shapBaseline ?? shapWaterfall.baseline).toFixed(3)}
+                            </p>
+                            {shapFxDisplay !== null && (
+                              <p>
+                                Patient prediction f(x) = {shapFxDisplay.toFixed(3)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
                       <p className="text-xs text-blue-600">{t('shap_unavailable')}</p>
                     )}
                   </div>
