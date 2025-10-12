@@ -474,15 +474,28 @@ Remember: This tool supports your healthcare team. Follow the plan you set toget
     def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
         """Create a PDF report summarizing the diagnostic analysis."""
         pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.set_auto_page_break(auto=True, margin=18)
         pdf.add_page()
         content_width = pdf.w - pdf.l_margin - pdf.r_margin
+        left = pdf.l_margin
 
+        # Professional header banner
+        header_y = pdf.get_y()
+        pdf.set_fill_color(29, 78, 216)
+        pdf.set_draw_color(29, 78, 216)
+        pdf.rect(left, header_y, content_width, 18, 'F')
+        pdf.set_xy(left + 2, header_y + 4)
+        pdf.set_text_color(255, 255, 255)
         pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "DiagnoAI Pancreas - Diagnostic Report", ln=True)
-        pdf.set_font("Helvetica", "", 12)
-        pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.cell(0, 6, "DiagnoAI Pancreas", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 6, "Comprehensive Diagnostic Summary", ln=True)
         pdf.ln(4)
+
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 6, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.ln(2)
 
         prediction_flag = analysis.get('prediction', 0)
         risk_level = analysis.get('risk_level', 'N/A')
@@ -491,59 +504,125 @@ Remember: This tool supports your healthcare team. Follow the plan you set toget
         except (TypeError, ValueError):
             probability_pct = 0.0
 
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Summary", ln=True)
-        pdf.set_font("Helvetica", "", 12)
         prediction_text = "High Risk - Further Evaluation Recommended" if prediction_flag else "Low Risk Assessment"
-        pdf.cell(0, 6, f"Prediction: {prediction_text}", ln=True)
-        pdf.cell(0, 6, f"Risk Level: {risk_level}", ln=True)
-        pdf.cell(0, 6, f"Risk Probability: {probability_pct:.1f}%", ln=True)
-        pdf.ln(4)
+        risk_colors = {
+            'High': (220, 38, 38),
+            'Moderate': (234, 179, 8),
+            'Low': (22, 163, 74)
+        }
+        risk_color = risk_colors.get(str(risk_level).title(), (51, 65, 85))
+        risk_background = tuple(min(255, component + 160) for component in risk_color)
 
-        pdf.set_font("Helvetica", "B", 14)
+        # Overview cards
+        card_width = (content_width - 6) / 3
+        card_height = 20
+        cards = [
+            ("Prediction", prediction_text, (248, 250, 252), (30, 41, 59)),
+            ("Risk Level", str(risk_level).upper(), risk_background, risk_color),
+            ("Risk Probability", f"{probability_pct:.1f}%", (248, 250, 252), (59, 130, 246)),
+        ]
+
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, "Case Overview", ln=True)
+        pdf.set_line_width(0.3)
+        for idx, (title, value, bg_color, text_color) in enumerate(cards):
+            x = left + idx * (card_width + 3)
+            y = pdf.get_y()
+            pdf.set_xy(x, y)
+            pdf.set_fill_color(*bg_color)
+            pdf.set_draw_color(226, 232, 240)
+            pdf.rect(x, y, card_width, card_height, 'DF')
+            pdf.set_xy(x + 3, y + 4)
+            pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(100, 116, 139)
+            pdf.cell(card_width - 6, 4, title.upper(), ln=True)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(*text_color)
+            pdf.cell(card_width - 6, 6, value, ln=True)
+        pdf.ln(card_height + 4)
+        pdf.set_text_color(30, 41, 59)
+
+        pdf.set_font("Helvetica", "B", 12)
         pdf.cell(0, 8, "Patient Laboratory Values", ln=True)
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font("Helvetica", "", 10)
         feature_keys = [
             'wbc', 'rbc', 'plt', 'hgb', 'hct', 'mpv', 'pdw',
             'mono', 'baso_abs', 'baso_pct', 'glucose', 'act', 'bilirubin'
         ]
-        for key, label in zip(feature_keys, FEATURE_NAMES):
+        table_widths = [content_width * 0.4, content_width * 0.25, content_width * 0.35]
+        pdf.set_draw_color(226, 232, 240)
+        pdf.set_fill_color(226, 232, 240)
+        pdf.set_text_color(71, 85, 105)
+        headers = ["Biomarker", "Patient Value", "Reference Range"]
+        for header, width in zip(headers, table_widths):
+            pdf.cell(width, 8, header, border=1, align='C', fill=True)
+        pdf.ln()
+        pdf.set_text_color(30, 41, 59)
+
+        for idx, (key, label) in enumerate(zip(feature_keys, FEATURE_NAMES)):
             raw_value = patient_inputs.get(key)
             try:
                 formatted_value = f"{float(raw_value):.2f}"
             except (TypeError, ValueError):
                 formatted_value = 'N/A' if raw_value is None else str(raw_value)
-            pdf.cell(0, 6, f"{label}: {formatted_value}", ln=True)
-        pdf.ln(4)
+            ref_range = MEDICAL_RANGES.get(key)
+            ref_text = f"{ref_range[0]} - {ref_range[1]}" if ref_range else "N/A"
+            row_fill = (248, 250, 252) if idx % 2 == 0 else (255, 255, 255)
+            pdf.set_fill_color(*row_fill)
+            fill = idx % 2 == 0
+            pdf.cell(table_widths[0], 8, label, border=1, align='L', fill=fill)
+            pdf.cell(table_widths[1], 8, formatted_value, border=1, align='C', fill=fill)
+            pdf.cell(table_widths[2], 8, ref_text, border=1, align='C', fill=fill)
+            pdf.ln()
+        pdf.ln(6)
 
         shap_values = analysis.get('shap_values') or analysis.get('shapValues') or []
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Top Contributing Factors", ln=True)
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, "Top Contributing Factors (SHAP)", ln=True)
+        pdf.set_font("Helvetica", "", 10)
         if shap_values:
-            for item in shap_values[:5]:
+            pdf.set_fill_color(248, 250, 252)
+            pdf.set_draw_color(226, 232, 240)
+            pdf.cell(content_width * 0.4, 8, "Feature", border=1, fill=True)
+            pdf.cell(content_width * 0.25, 8, "Impact", border=1, align='C', fill=True)
+            pdf.cell(content_width * 0.35, 8, "Interpretation", border=1, fill=True)
+            pdf.ln()
+            for item in shap_values[:6]:
                 feature = item.get('feature', 'Unknown')
                 impact = item.get('impact', 'neutral')
                 value = item.get('value', 0)
                 try:
-                    value_str = f"{float(value):+.3f}"
+                    value_float = float(value)
+                    value_str = f"{value_float:+.3f}"
                 except (TypeError, ValueError):
                     value_str = str(value)
-                pdf.multi_cell(content_width, 6, f"{feature} ({impact} impact): {value_str}")
+                    value_float = 0.0
+                interpretation = "Increases risk" if value_float > 0 else "Protective influence"
+                pdf.cell(content_width * 0.4, 8, feature, border=1)
+                pdf.cell(content_width * 0.25, 8, value_str, border=1, align='C')
+                pdf.cell(content_width * 0.35, 8, f"{impact.capitalize()} - {interpretation}", border=1)
+                pdf.ln()
         else:
+            pdf.set_text_color(100, 116, 139)
             pdf.multi_cell(content_width, 6, "SHAP analysis unavailable.")
-        pdf.ln(4)
+            pdf.set_text_color(30, 41, 59)
+        pdf.ln(6)
 
         commentary = analysis.get('ai_explanation') or analysis.get('aiExplanation') or ''
         if commentary:
-            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_font("Helvetica", "B", 12)
             pdf.cell(0, 8, "AI Clinical Commentary", ln=True)
-            pdf.set_font("Helvetica", "", 11)
+            pdf.set_font("Helvetica", "", 10)
             pdf.multi_cell(content_width, 6, commentary)
             pdf.ln(4)
 
         pdf.set_font("Helvetica", "I", 9)
-        pdf.multi_cell(content_width, 5, "This report is generated by the DiagnoAI Pancreas screening platform. Clinical correlation is required before making medical decisions.")
+        pdf.set_text_color(100, 116, 139)
+        pdf.multi_cell(
+            content_width,
+            5,
+            "Generated by the DiagnoAI Pancreas screening platform. Clinical correlation is required before making medical decisions."
+        )
 
         pdf_bytes = bytes(pdf.output(dest='S'))
         buffer = BytesIO(pdf_bytes)
