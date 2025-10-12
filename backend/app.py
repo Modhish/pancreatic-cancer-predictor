@@ -30,6 +30,23 @@ from io import BytesIO
 from fpdf import FPDF
 import math
 
+try:
+    from guidelines import (
+        GUIDELINE_SOURCES,
+        LAB_THRESHOLDS,
+        IMAGING_PATHWAYS,
+        HIGH_RISK_CRITERIA,
+        FOLLOW_UP_WINDOWS,
+    )
+except ImportError:  # pragma: no cover
+    from .guidelines import (  # type: ignore
+        GUIDELINE_SOURCES,
+        LAB_THRESHOLDS,
+        IMAGING_PATHWAYS,
+        HIGH_RISK_CRITERIA,
+        FOLLOW_UP_WINDOWS,
+    )
+
 # Load environment variables
 load_dotenv()
 
@@ -112,6 +129,11 @@ class MedicalDiagnosticSystem:
             'roc_auc': 0.962,
             'specificity': 0.939
         }
+        self.guideline_sources = GUIDELINE_SOURCES
+        self.lab_thresholds = LAB_THRESHOLDS
+        self.imaging_pathways = IMAGING_PATHWAYS
+        self.high_risk_criteria = HIGH_RISK_CRITERIA
+        self.follow_up_windows = FOLLOW_UP_WINDOWS
         self.load_model()
 
     def load_model(self):
@@ -203,11 +225,10 @@ class MedicalDiagnosticSystem:
         if mono > 0.6:  # Monocytosis
             risk_score += 0.1
 
-        # Calculate probability with some randomness for variety
-        import random
-        base_prob = min(risk_score, 0.85)
-        noise = random.uniform(-0.05, 0.05)
-        probability = max(0.1, min(0.95, base_prob + noise))
+        # Deterministic probability mapping using logistic scaling
+        scaled_score = max(-3.0, min(3.0, risk_score * 3.0 - 1.0))
+        probability = 1 / (1 + math.exp(-scaled_score))
+        probability = max(0.1, min(0.95, probability))
 
         prediction = 1 if probability > 0.5 else 0
 
@@ -277,9 +298,9 @@ class MedicalDiagnosticSystem:
         ]
 
         for i, (feature_name, impact_value) in enumerate(zip(FEATURE_NAMES, feature_impacts)):
-            # Add some realistic variation
-            import random
-            noise = random.uniform(-0.01, 0.01)
+            # Add deterministic variation based on feature magnitude and index
+            raw_value = features[i] if i < len(features) else 0.0
+            noise = math.sin((raw_value + 1) * (i + 1) * 0.37) * 0.006
             final_value = impact_value + noise
 
             shap_values.append({
@@ -470,6 +491,16 @@ Call your doctor sooner if you notice: new stomach or back pain, yellow skin or 
 Remember: This tool supports your healthcare team. Follow the plan you set together with your doctor."""
 
         return commentary
+
+    def guideline_snapshot(self) -> Dict[str, Any]:
+        """Provide structured guideline data for downstream consumers."""
+        return {
+            'sources': self.guideline_sources,
+            'lab_thresholds': self.lab_thresholds,
+            'imaging_pathways': self.imaging_pathways,
+            'high_risk_criteria': self.high_risk_criteria,
+            'follow_up_windows': self.follow_up_windows,
+        }
 
     def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
         """Create a PDF report summarizing the diagnostic analysis."""
@@ -786,7 +817,8 @@ def model_info():
         'last_updated': '2024-01-15',
         'medical_validation': 'FDA Approved',
         'compliance': 'HIPAA Compliant',
-        'reference_ranges': MEDICAL_RANGES
+        'reference_ranges': MEDICAL_RANGES,
+        'guidelines': diagnostic_system.guideline_snapshot()
     })
 
 @app.errorhandler(404)
