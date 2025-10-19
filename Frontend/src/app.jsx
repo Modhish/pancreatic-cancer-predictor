@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, Brain, CheckCircle2, AlertTriangle, Gauge, Loader2, ShieldCheck,
-  Stethoscope, Users, Award, BarChart3, Menu, X, ArrowRight, 
+  Stethoscope, Users, Award, BarChart3, ScatterChart, Menu, X, ArrowRight, 
   Heart, Microscope, Zap, Lock, FileText, Phone, Mail, MapPin,
   ChevronDown, ExternalLink, Star, TrendingUp, Clock, Home
 } from "lucide-react";
@@ -518,6 +518,25 @@ function HomeSection({ onStartDiagnosis, onLearnMore, t }) {
 
 function DiagnosticTool({ form, setForm, result, loading, downloading, err, handleChange, handleSubmit, handleDownload, handleClear, validate, language, setLanguage, clientType, setClientType, t }) {
   const [showGraphs, setShowGraphs] = useState(true);
+  const [graphVisibility, setGraphVisibility] = useState({
+    waterfall: true,
+    bar: true,
+    beeswarm: true,
+  });
+  const toggleGraph = useCallback((key) => {
+    setGraphVisibility((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (!Object.values(next).some(Boolean)) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+  const graphControls = useMemo(() => [
+    { key: 'waterfall', label: t('graph_waterfall'), icon: Activity },
+    { key: 'bar', label: t('graph_bar'), icon: BarChart3 },
+    { key: 'beeswarm', label: t('graph_beeswarm'), icon: ScatterChart },
+  ], [t]);
 
   const shapSummary = useMemo(() => {
     if (!result?.shap_values?.length) return [];
@@ -594,6 +613,52 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
     }, 0);
     return maxAbs > 0 ? maxAbs : 1;
   }, [shapSummary]);
+  const beeswarmPoints = useMemo(() => {
+    if (!shapSummary.length) return [];
+
+    const range = shapMaxAbs || 1;
+    const minGap = 6;
+    const offsetStep = 14;
+    const lanes = [];
+    const points = [];
+
+    const sorted = [...shapSummary].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+
+    sorted.forEach((entry) => {
+      const safeRange = range === 0 ? 1 : range;
+      const rawX = ((entry.value + safeRange) / (2 * safeRange)) * 100;
+      const x = Math.max(4, Math.min(96, rawX));
+
+      let laneIndex = 0;
+      while (true) {
+        const lane = lanes[laneIndex] || [];
+        const conflict = lane.some((other) => Math.abs(other.x - x) < minGap);
+        if (!conflict) {
+          lane.push({ x });
+          lanes[laneIndex] = lane;
+          break;
+        }
+        laneIndex += 1;
+      }
+
+      let offset = 0;
+      if (laneIndex > 0) {
+        const magnitude = Math.ceil(laneIndex / 2) * offsetStep;
+        const sign = laneIndex % 2 === 1 ? 1 : -1;
+        offset = magnitude * sign;
+      }
+
+      const y = Math.max(12, Math.min(88, 50 + offset));
+
+      points.push({
+        entry,
+        x,
+        y,
+      });
+    });
+
+    return points;
+  }, [shapSummary, shapMaxAbs]);
   const shapRange = shapWaterfall ? Math.max(shapWaterfall.max - shapWaterfall.min, 1e-6) : 1;
   const shapFxDisplay =
     typeof result?.probability === 'number' && Number.isFinite(result.probability)
@@ -604,6 +669,7 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
     const percent = ((value - shapWaterfall.min) / shapRange) * 100;
     return Math.min(100, Math.max(0, percent));
   };
+  const hasShapDetails = shapSummary.length > 0 && shapWaterfall;
 
   const aiExplanation = result?.ai_explanation || result?.aiExplanation || "";
 
@@ -784,7 +850,7 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
                       </button>
                     </div>
                     {showGraphs ? (
-                      shapSummary.length > 0 && shapWaterfall ? (
+                      hasShapDetails ? (
                         <div className="space-y-4 pt-2">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">
@@ -807,99 +873,169 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
                               )}
                             </div>
                           </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
-                            <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                              <span className="text-right">Feature Impact</span>
-                              <span>Contribution Flow</span>
-                              <span className="text-right">Cumulative</span>
-                            </div>
-                            {shapWaterfall.steps.map((step) => {
-                              const isPositive = step.value >= 0;
-                              const barColor = isPositive ? 'bg-rose-500' : 'bg-blue-500';
-                              const textColor = isPositive ? 'text-rose-600' : 'text-blue-600';
-                              const startPercent = shapPercent(Math.min(step.start, step.end));
-                              const endPercent = shapPercent(Math.max(step.start, step.end));
-                              const widthPercent = Math.max(endPercent - startPercent, 1.5);
-                              const startMarker = shapPercent(step.start);
-                              const endMarker = shapPercent(step.end);
-                              const baselineMarker = shapPercent(shapWaterfall.baseline);
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-500">
+                            <span className="uppercase tracking-wide text-slate-600">{t('graphs_picker_label')}</span>
+                            {graphControls.map(({ key, label, icon: Icon }) => {
+                              const active = graphVisibility[key];
                               return (
-                                <div
-                                  key={step.feature}
-                                  className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-xs"
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => toggleGraph(key)}
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 transition ${
+                                    active
+                                      ? 'bg-blue-600 text-white shadow'
+                                      : 'bg-white/80 text-blue-600 border border-blue-100 hover:bg-white'
+                                  }`}
                                 >
-                                  <span className="font-semibold text-slate-600 text-right whitespace-nowrap">
-                                    {`${step.value >= 0 ? '+' : ''}${step.value.toFixed(3)} = ${step.feature.toUpperCase()}`}
-                                  </span>
-                                  <div className="relative h-7 rounded-lg bg-slate-100">
-                                    <div
-                                      className="absolute inset-y-1 w-px bg-slate-300"
-                                      style={{ left: `${baselineMarker}%` }}
-                                    />
-                                    <div
-                                      className="absolute inset-y-2 w-px bg-slate-400/70"
-                                      style={{ left: `${startMarker}%` }}
-                                    />
-                                    <div
-                                      className="absolute inset-y-2 w-px bg-slate-400/70"
-                                      style={{ left: `${endMarker}%` }}
-                                    />
-                                    <div
-                                      className={`absolute top-1.5 bottom-1.5 rounded-md ${barColor}`}
-                                      style={{ left: `${startPercent}%`, width: `${widthPercent}%` }}
-                                    />
-                                    <div
-                                      className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
-                                      style={{ left: `${startMarker}%` }}
-                                    />
-                                    <div
-                                      className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
-                                      style={{ left: `${endMarker}%` }}
-                                    />
-                                  </div>
-                                  <span className={`font-semibold ${textColor}`}>
-                                    {step.end >= 0 ? '+' : ''}
-                                    {step.end.toFixed(3)}
-                                  </span>
-                                </div>
+                                  <Icon className="h-3.5 w-3.5" />
+                                  <span>{label}</span>
+                                </button>
                               );
                             })}
                           </div>
-                          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <h5 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                <BarChart3 className="h-4 w-4 text-blue-600" />
-                                {t('bar_plot_title')}
-                              </h5>
-                              <span className="text-[11px] text-slate-500">
-                                {t('bar_plot_desc')}
-                              </span>
-                            </div>
-                            <div className="space-y-2">
-                              {shapSummary.map((entry) => {
-                                const isPositive = entry.value >= 0;
-                                const magnitude = Math.abs(entry.value);
-                                const width = Math.max((magnitude / shapMaxAbs) * 100, 3);
+                          {graphVisibility.waterfall && (
+                            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
+                              <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                                <span className="text-right">Feature Impact</span>
+                                <span>Contribution Flow</span>
+                                <span className="text-right">Cumulative</span>
+                              </div>
+                              {shapWaterfall.steps.map((step) => {
+                                const isPositive = step.value >= 0;
+                                const barColor = isPositive ? 'bg-rose-500' : 'bg-blue-500';
+                                const textColor = isPositive ? 'text-rose-600' : 'text-blue-600';
+                                const startPercent = shapPercent(Math.min(step.start, step.end));
+                                const endPercent = shapPercent(Math.max(step.start, step.end));
+                                const widthPercent = Math.max(endPercent - startPercent, 1.5);
+                                const startMarker = shapPercent(step.start);
+                                const endMarker = shapPercent(step.end);
+                                const baselineMarker = shapPercent(shapWaterfall.baseline);
                                 return (
-                                  <div key={`bar-${entry.feature}`} className="space-y-1">
-                                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
-                                      <span className="uppercase">{entry.feature}</span>
-                                      <span className={isPositive ? 'text-rose-600' : 'text-blue-600'}>
-                                        {entry.value >= 0 ? '+' : ''}
-                                        {entry.value.toFixed(3)}
-                                      </span>
-                                    </div>
-                                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                                  <div
+                                    key={step.feature}
+                                    className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-xs"
+                                  >
+                                    <span className="font-semibold text-slate-600 text-right whitespace-nowrap">
+                                      {`${step.value >= 0 ? '+' : ''}${step.value.toFixed(3)} = ${step.feature.toUpperCase()}`}
+                                    </span>
+                                    <div className="relative h-7 rounded-lg bg-slate-100">
                                       <div
-                                        className={`h-full ${isPositive ? 'bg-rose-500' : 'bg-blue-500'}`}
-                                        style={{ width: `${width}%` }}
+                                        className="absolute inset-y-1 w-px bg-slate-300"
+                                        style={{ left: `${baselineMarker}%` }}
+                                      />
+                                      <div
+                                        className="absolute inset-y-2 w-px bg-slate-400/70"
+                                        style={{ left: `${startMarker}%` }}
+                                      />
+                                      <div
+                                        className="absolute inset-y-2 w-px bg-slate-400/70"
+                                        style={{ left: `${endMarker}%` }}
+                                      />
+                                      <div
+                                        className={`absolute top-1.5 bottom-1.5 rounded-md ${barColor}`}
+                                        style={{ left: `${startPercent}%`, width: `${widthPercent}%` }}
+                                      />
+                                      <div
+                                        className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
+                                        style={{ left: `${startMarker}%` }}
+                                      />
+                                      <div
+                                        className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${barColor}`}
+                                        style={{ left: `${endMarker}%` }}
                                       />
                                     </div>
+                                    <span className={`font-semibold ${textColor}`}>
+                                      {step.end >= 0 ? '+' : ''}
+                                      {step.end.toFixed(3)}
+                                    </span>
                                   </div>
                                 );
                               })}
                             </div>
-                          </div>
+                          )}
+                          {graphVisibility.bar && (
+                            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h5 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                  <BarChart3 className="h-4 w-4 text-blue-600" />
+                                  {t('bar_plot_title')}
+                                </h5>
+                                <span className="text-[11px] text-slate-500">
+                                  {t('bar_plot_desc')}
+                                </span>
+                              </div>
+                              <div className="space-y-2">
+                                {shapSummary.map((entry) => {
+                                  const isPositive = entry.value >= 0;
+                                  const magnitude = Math.abs(entry.value);
+                                  const width = Math.max((magnitude / shapMaxAbs) * 100, 3);
+                                  return (
+                                    <div key={`bar-${entry.feature}`} className="space-y-1">
+                                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                                        <span className="uppercase">{entry.feature}</span>
+                                        <span className={isPositive ? 'text-rose-600' : 'text-blue-600'}>
+                                          {entry.value >= 0 ? '+' : ''}
+                                          {entry.value.toFixed(3)}
+                                        </span>
+                                      </div>
+                                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                                        <div
+                                          className={`h-full ${isPositive ? 'bg-rose-500' : 'bg-blue-500'}`}
+                                          style={{ width: `${width}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {graphVisibility.beeswarm && beeswarmPoints.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h5 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                  <ScatterChart className="h-4 w-4 text-blue-600" />
+                                  {t('beeswarm_title')}
+                                </h5>
+                                <span className="text-[11px] text-slate-500">
+                                  {t('beeswarm_desc')}
+                                </span>
+                              </div>
+                              <div className="relative h-48 overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50">
+                                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-200" />
+                                <div className="absolute inset-x-8 bottom-4 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                  <span>{t('beeswarm_axis_left')}</span>
+                                  <span>{t('beeswarm_axis_right')}</span>
+                                </div>
+                                <div className="absolute left-1/2 bottom-4 -translate-x-1/2 text-[10px] font-semibold text-slate-500">
+                                  0
+                                </div>
+                                {beeswarmPoints.map(({ entry, x, y }) => {
+                                  const positive = entry.value >= 0;
+                                  return (
+                                    <div
+                                      key={`beeswarm-${entry.feature}`}
+                                      className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+                                      style={{ left: `${x}%`, top: `${y}%` }}
+                                      title={`${entry.feature.toUpperCase()} (${positive ? '+' : ''}${entry.value.toFixed(3)})`}
+                                    >
+                                      <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
+                                        {entry.feature}
+                                      </span>
+                                      <span
+                                        className={`mt-1 h-3 w-3 rounded-full border-2 ${positive ? 'bg-rose-500 border-rose-100' : 'bg-blue-500 border-blue-100'}`}
+                                      />
+                                      <span className={`mt-1 text-[10px] font-semibold ${positive ? 'text-rose-600' : 'text-blue-600'}`}>
+                                        {positive ? '+' : ''}
+                                        {entry.value.toFixed(3)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                           <div className="flex flex-col items-center gap-1 text-[11px] font-medium text-slate-500">
                             <p>
                               Model baseline E[f(X)] = {(shapBaseline ?? shapWaterfall.baseline).toFixed(3)}
