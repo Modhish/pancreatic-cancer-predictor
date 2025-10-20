@@ -65,6 +65,96 @@ const GUIDELINE_LINKS = [
   },
 ];
 
+const parseAiAnalysis = (text) => {
+  if (!text || typeof text !== 'string') {
+    return null;
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (!lines.length) {
+    return null;
+  }
+
+  const headingPattern = /^[A-Z\u0410-\u042F0-9][A-Z\u0410-\u042F0-9\s&|\u00B7\-\.,:\/]+$/;
+  const bulletPattern = /^[-\u2022\u25CF]\s+/;
+  const footerMarkers = ['REMINDER', '???????????'];
+
+  const header = lines.shift();
+  if (!header) {
+    return null;
+  }
+
+  let subtitle = null;
+  if (lines.length && lines[0].includes(':')) {
+    subtitle = lines.shift();
+  }
+
+  const sections = [];
+  let current = null;
+
+  const pushCurrent = () => {
+    if (current && current.lines.length > 0) {
+      sections.push(current);
+    }
+  };
+
+  lines.forEach((line) => {
+    if (headingPattern.test(line)) {
+      pushCurrent();
+      current = { title: line, lines: [] };
+    } else if (current) {
+      current.lines.push(line);
+    }
+  });
+  pushCurrent();
+
+  if (!sections.length) {
+    return null;
+  }
+
+  const parsedSections = [];
+  let footer = null;
+
+  sections.forEach((section) => {
+    const bullets = [];
+    const paragraphs = [];
+
+    section.lines.forEach((contentLine) => {
+      if (bulletPattern.test(contentLine)) {
+        bullets.push(contentLine.replace(bulletPattern, '').trim());
+      } else {
+        paragraphs.push(contentLine);
+      }
+    });
+
+    const normalizedTitle = section.title.trim();
+    if (footerMarkers.some((marker) => normalizedTitle.includes(marker))) {
+      const footerText = [...paragraphs, ...bullets].join(' ');
+      footer = {
+        title: normalizedTitle,
+        text: footerText,
+      };
+    } else {
+      parsedSections.push({
+        title: normalizedTitle,
+        bullets,
+        paragraphs,
+      });
+    }
+  });
+
+  return {
+    header,
+    subtitle,
+    sections: parsedSections,
+    footer,
+  };
+};
+
 export default function App() {
   const [currentSection, setCurrentSection] = useState('home');
   const [form, setForm] = useState(defaultForm);
@@ -81,6 +171,15 @@ export default function App() {
     }
     return 'en';
   });
+  const [analysisLanguage, setAnalysisLanguage] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('language');
+      return saved === 'ru' ? 'ru' : 'en';
+    }
+    return 'en';
+  });
+  const [analysisCache, setAnalysisCache] = useState({});
+  const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -89,6 +188,12 @@ export default function App() {
       localStorage.setItem('language', language);
     }
   }, [language]);
+
+  useEffect(() => {
+    if (!result) {
+      setAnalysisLanguage(language);
+    }
+  }, [language, result]);
 
   const handleChange = (e) => {
     setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
@@ -145,11 +250,77 @@ export default function App() {
         throw new Error(msg);
       }
       const data = await res.json();
-      setResult(data);
+      const aiExplanation = data.ai_explanation || data.aiExplanation || "";
+      setResult({ ...data, ai_explanation: aiExplanation });
+      setAnalysisLanguage(language);
+      setAnalysisCache({ [language]: aiExplanation });
     } catch (e) {
       setErr(`Failed to reach the server. Make sure Flask is running on ${API_BASE} (error: ${e.message})`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAnalysisLanguageChange = async (lang) => {
+    const previousLanguage = analysisLanguage;
+    if (lang === previousLanguage) {
+      return;
+    }
+    setAnalysisLanguage(lang);
+
+    if (!result) {
+      return;
+    }
+
+    const cached = analysisCache[lang];
+    if (cached !== undefined) {
+      setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
+      return;
+    }
+
+    setAnalysisRefreshing(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/commentary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysis: result,
+          patient_values: result.patient_values,
+          shap_values: result.shap_values || result.shapValues || [],
+          language: lang,
+          client_type: clientType,
+        }),
+      });
+
+      if (!response.ok) {
+        let msg = `${response.status} ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) {
+            msg = errJson.error;
+          }
+        } catch {}
+        throw new Error(msg);
+      }
+
+      const data = await response.json();
+      const newText = data.ai_explanation || data.aiExplanation || "";
+      setAnalysisCache((prev) => ({ ...prev, [lang]: newText }));
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              ai_explanation: newText,
+              language: data.language || lang,
+              risk_level: data.risk_level || prev.risk_level,
+            }
+          : prev,
+      );
+    } catch (refreshError) {
+      setErr(`Failed to refresh commentary: ${refreshError.message}`);
+      setAnalysisLanguage(previousLanguage);
+    } finally {
+      setAnalysisRefreshing(false);
     }
   };
 
@@ -162,7 +333,7 @@ export default function App() {
     try {
       const patientPayload = result.patient_values ? { ...result.patient_values } : { ...form };
       const shapPayload = result.shap_values || result.shapValues || [];
-      const aiExplanation = result.ai_explanation || result.aiExplanation || "";
+      const aiExplanation = activeAiExplanation;
 
       const response = await fetch(`${API_BASE}/api/report`, {
         method: "POST",
@@ -172,9 +343,10 @@ export default function App() {
           result: {
             ...result,
             shap_values: shapPayload,
-            ai_explanation: aiExplanation
+            ai_explanation: aiExplanation,
+            language: analysisLanguage,
           },
-          language,
+          language: analysisLanguage,
         })
       });
 
@@ -212,7 +384,12 @@ export default function App() {
     setForm(Object.keys(defaultForm).reduce((acc, k) => ({ ...acc, [k]: "" }), {}));
     setResult(null);
     setErr("");
+    setAnalysisCache({});
+    setAnalysisLanguage(language);
   };
+
+  const baseAiExplanation = result?.ai_explanation || result?.aiExplanation || "";
+  const activeAiExplanation = analysisCache[analysisLanguage] ?? baseAiExplanation;
 
   const renderSection = () => {
     switch (currentSection) {
@@ -227,15 +404,19 @@ export default function App() {
             err={err}
             handleChange={handleChange}
             handleSubmit={handleSubmit}
-            handleDownload={handleDownload}
-            handleClear={handleClear}
-            validate={validate}
-            language={language}
-            setLanguage={setLanguage}
-            clientType={clientType}
-            setClientType={setClientType}
-            t={t}
-          />
+          handleDownload={handleDownload}
+          handleClear={handleClear}
+          validate={validate}
+          language={language}
+          setLanguage={setLanguage}
+          clientType={clientType}
+          setClientType={setClientType}
+          analysisLanguage={analysisLanguage}
+          analysisRefreshing={analysisRefreshing}
+          onAnalysisLanguageChange={handleAnalysisLanguageChange}
+          aiExplanation={activeAiExplanation}
+          t={t}
+        />
         );
       case 'about':
         return <AboutSection t={t} />;
@@ -516,7 +697,28 @@ function HomeSection({ onStartDiagnosis, onLearnMore, t }) {
   );
 }
 
-function DiagnosticTool({ form, setForm, result, loading, downloading, err, handleChange, handleSubmit, handleDownload, handleClear, validate, language, setLanguage, clientType, setClientType, t }) {
+function DiagnosticTool({
+  form,
+  setForm,
+  result,
+  loading,
+  downloading,
+  err,
+  handleChange,
+  handleSubmit,
+  handleDownload,
+  handleClear,
+  validate,
+  language,
+  setLanguage,
+  clientType,
+  setClientType,
+  analysisLanguage,
+  analysisRefreshing,
+  onAnalysisLanguageChange,
+  aiExplanation,
+  t,
+}) {
   const [showGraphs, setShowGraphs] = useState(true);
   const [graphVisibility, setGraphVisibility] = useState({
     waterfall: true,
@@ -671,7 +873,7 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
   };
   const hasShapDetails = shapSummary.length > 0 && shapWaterfall;
 
-  const aiExplanation = result?.ai_explanation || result?.aiExplanation || "";
+  const aiStructured = useMemo(() => parseAiAnalysis(aiExplanation), [aiExplanation]);
 
   return (
     <div className="py-16 bg-slate-100" dir="ltr">
@@ -1056,12 +1258,84 @@ function DiagnosticTool({ form, setForm, result, loading, downloading, err, hand
                   </div>
 
                   <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3">
-                    <h4 className="text-lg font-semibold text-slate-900">{t('ai_title')}</h4>
-                    <p className="text-xs text-slate-400">{t('ai_disclaimer')}</p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h4 className="text-lg font-semibold text-slate-900">{t('ai_title')}</h4>
+                        <p className="text-xs text-slate-400">{t('ai_disclaimer')}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {analysisRefreshing && (
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        )}
+                        <div className="flex rounded-full bg-slate-100 p-1">
+                          {SUPPORTED_LANGUAGES.map(({ value, label }) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => onAnalysisLanguageChange(value)}
+                              disabled={analysisRefreshing || !result}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-full transition disabled:opacity-60 disabled:cursor-not-allowed ${
+                                analysisLanguage === value
+                                  ? 'bg-blue-600 text-white shadow'
+                                  : 'text-slate-500 hover:text-blue-600'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {aiStructured ? (
+                      <div className="space-y-5">
+                        <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 p-5 text-white shadow">
+                          <h5 className="text-lg font-semibold">{aiStructured.header}</h5>
+                          {aiStructured.subtitle && (
+                            <p className="mt-1 text-sm text-blue-100/90">{aiStructured.subtitle}</p>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          {aiStructured.sections.map((section) => (
+                            <div
+                              key={section.title}
+                              className="rounded-2xl border border-slate-100 bg-white/95 p-5 shadow-sm transition hover:shadow-md"
+                            >
+                              <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                {section.title}
+                              </h6>
+                              <div className="mt-3 space-y-3 text-sm text-slate-600">
+                                {section.paragraphs.map((paragraph, idx) => (
+                                  <p key={`paragraph-${section.title}-${idx}`}>{paragraph}</p>
+                                ))}
+                                {section.bullets.length > 0 && (
+                                  <ul className="space-y-2">
+                                    {section.bullets.map((item, idx) => (
+                                      <li key={`bullet-${section.title}-${idx}`} className="flex items-start gap-2">
+                                        <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-blue-500" />
+                                        <span>{item}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {aiStructured.footer && (
+                          <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4 text-sm text-blue-700">
+                            <h6 className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                              {aiStructured.footer.title}
+                            </h6>
+                            <p className="mt-1 leading-relaxed">{aiStructured.footer.text}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
                       <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
                         {aiExplanation || t('ai_unavailable')}
                       </div>
-                    </div>
+                    )}
+                  </div>
 
                     <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3">
                       <h4 className="text-lg font-semibold text-slate-900">Clinical Guideline Sources</h4>

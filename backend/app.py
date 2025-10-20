@@ -1,364 +1,1077 @@
-﻿"""
-DiagnoAI Pancreas - Professional Flask Backend API
-
-Advanced medical diagnostic system with:
-- Professional Flask API with comprehensive error handling
-- Integration with advanced ML model and SHAP analysis
-- AI-powered clinical commentary generation
-- Medical data validation and security
-- HIPAA-compliant data handling
-
-Author: DiagnoAI Medical Systems
-Version: 2.1.0
-License: Medical Device Software
-"""
-
-from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
-import numpy as np
-import joblib
-import shap
-from groq import Groq
-import os
-import sys
-import logging
-from datetime import datetime
-from typing import Dict, Any, List
-from dotenv import load_dotenv
-import traceback
-from io import BytesIO
-from fpdf import FPDF
-import math
-
-try:
-    from guidelines import (
-        GUIDELINE_SOURCES,
-        LAB_THRESHOLDS,
-        IMAGING_PATHWAYS,
-        HIGH_RISK_CRITERIA,
-        FOLLOW_UP_WINDOWS,
-    )
-except ImportError:  # pragma: no cover
-    from .guidelines import (  # type: ignore
-        GUIDELINE_SOURCES,
-        LAB_THRESHOLDS,
-        IMAGING_PATHWAYS,
-        HIGH_RISK_CRITERIA,
-        FOLLOW_UP_WINDOWS,
-    )
-
-# Load environment variables
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize Flask app
-app = Flask(__name__)
-app.config['JSON_SORT_KEYS'] = False
-
-# CORS configuration for medical applications
-CORS(app, origins=[
-    "http://localhost:3000",
-    "http://localhost:5173", 
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173"
-])
-
-# Initialize AI client for clinical commentary
-try:
-    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    logger.info("AI client initialized successfully")
-except Exception as e:
-    logger.warning(f"AI client initialization failed: {e}")
-    groq_client = None
-
-# Medical reference ranges for validation
-MEDICAL_RANGES = {
-    'wbc': (4.0, 11.0),      # White Blood Cells (10^9/L)
-    'rbc': (4.0, 5.5),       # Red Blood Cells (10^12/L)
-    'plt': (150, 450),       # Platelets (10^9/L)
-    'hgb': (120, 160),       # Hemoglobin (g/L)
-    'hct': (36, 46),         # Hematocrit (%)
-    'mpv': (7.4, 10.4),      # Mean Platelet Volume (fL)
-    'pdw': (10, 18),         # Platelet Distribution Width (%)
-    'mono': (0.2, 0.8),      # Monocytes (10^9/L)
-    'baso_abs': (0.0, 0.1),  # Basophils Absolute (10^9/L)
-    'baso_pct': (0.0, 2.0),  # Basophils Percentage (%)
-    'glucose': (3.9, 5.6),   # Glucose (mmol/L)
-    'act': (10, 40),         # ACT (seconds)
-    'bilirubin': (5, 21)     # Bilirubin (umol/L)
-}
-
-FEATURE_NAMES = ['WBC', 'RBC', 'PLT', 'HGB', 'HCT', 'MPV', 'PDW', 
-                 'MONO', 'BASO_ABS', 'BASO_PCT', 'GLUCOSE', 'ACT', 'BILIRUBIN']
-
-FEATURE_DEFAULTS = [
-    ('wbc', 5.8),
-    ('rbc', 4.0),
-    ('plt', 184.0),
-    ('hgb', 127.0),
-    ('hct', 40.0),
-    ('mpv', 11.0),
-    ('pdw', 16.0),
-    ('mono', 0.42),
-    ('baso_abs', 0.01),
-    ('baso_pct', 0.2),
-    ('glucose', 6.3),
-    ('act', 26.0),
-    ('bilirubin', 17.0)
-]
-
-
-class MedicalDiagnosticSystem:
-    """Professional medical diagnostic system with ML and AI integration."""
-
-    def __init__(self):
-        self.model = None
-        self.scaler = None
-        self.shap_explainer = None
-        self.model_metrics = {
-            'accuracy': 0.942,
-            'precision': 0.938,
-            'recall': 0.945,
-            'f1_score': 0.941,
-            'roc_auc': 0.962,
-            'specificity': 0.939
-        }
-        self.guideline_sources = GUIDELINE_SOURCES
-        self.lab_thresholds = LAB_THRESHOLDS
-        self.imaging_pathways = IMAGING_PATHWAYS
-        self.high_risk_criteria = HIGH_RISK_CRITERIA
-        self.follow_up_windows = FOLLOW_UP_WINDOWS
-        self.load_model()
-
-    def load_model(self):
-        """Load pre-trained model and scaler."""
-        try:
-            model_path = 'models/random_forest.pkl'
-            if os.path.exists(model_path):
-                model_data = joblib.load(model_path)
-                self.model = model_data.get('model')
-                self.scaler = model_data.get('scaler')
-                logger.info("Model loaded successfully")
-            else:
-                logger.warning("Model file not found, using mock predictions")
-                self.model = None
-        except Exception as e:
-            logger.error(f"Error loading model: {e}")
-            self.model = None
-
-    def validate_medical_data(self, data: Dict[str, float]) -> tuple[bool, List[str]]:
-        """Validate medical data against reference ranges."""
-        errors = []
-
-        for feature, value in data.items():
-            if feature in MEDICAL_RANGES:
-                min_val, max_val = MEDICAL_RANGES[feature]
-                if not (min_val <= value <= max_val):
-                    errors.append(f"{feature.upper()}: {value} outside normal range ({min_val}-{max_val})")
-
-        return len(errors) == 0, errors
-
-    def predict_cancer_risk(self, features: List[float]) -> tuple[int, float]:
-        """Make cancer risk prediction."""
-        if self.model is not None:
-            try:
-                # Scale features if scaler is available
-                if self.scaler is not None:
-                    features_scaled = self.scaler.transform([features])
-                else:
-                    features_scaled = [features]
-
-                prediction = self.model.predict(features_scaled)[0]
-                probability = self.model.predict_proba(features_scaled)[0][1]
-                return int(prediction), float(probability)
-            except Exception as e:
-                logger.error(f"Model prediction error: {e}")
-
-        # Fallback to rule-based prediction
-        return self._rule_based_prediction(features)
-
-    def _rule_based_prediction(self, features: List[float]) -> tuple[int, float]:
-        """Enhanced rule-based prediction based on pancreatic cancer research."""
-        risk_score = 0.0
-
-        # Based on research: pancreatic cancer markers
-        wbc, rbc, plt, hgb, hct, mpv, pdw, mono, baso_abs, baso_pct, glucose, act, bilirubin = features
-
-        # Primary risk factors from research
-        if bilirubin > 20:  # Bilirubin elevated (jaundice common in pancreatic cancer)
-            risk_score += 0.35
-        elif bilirubin > 15:
-            risk_score += 0.2
-
-        if glucose > 6.5:  # Diabetes/impaired glucose tolerance
-            risk_score += 0.25
-        elif glucose > 5.8:
-            risk_score += 0.15
-
-        if plt > 350:  # Thrombocytosis
-            risk_score += 0.2
-        elif plt < 180:  # Thrombocytopenia
-            risk_score += 0.15
-
-        if wbc > 9.0:  # Leukocytosis
-            risk_score += 0.15
-        elif wbc < 4.5:  # Leukopenia
-            risk_score += 0.1
-
-        if hgb < 130:  # Anemia
-            risk_score += 0.15
-        elif hgb < 110:
-            risk_score += 0.25
-
-        if act > 35:  # Coagulation abnormalities
-            risk_score += 0.1
-
-        if mpv > 10.0:  # Platelet size changes
-            risk_score += 0.1
-
-        if mono > 0.6:  # Monocytosis
-            risk_score += 0.1
-
-        # Deterministic probability mapping using logistic scaling
-        scaled_score = max(-3.0, min(3.0, risk_score * 3.0 - 1.0))
-        probability = 1 / (1 + math.exp(-scaled_score))
-        probability = max(0.1, min(0.95, probability))
-
-        prediction = 1 if probability > 0.5 else 0
-
-        return prediction, probability
-
-    def calculate_shap_analysis(self, features: List[float], prediction: int) -> List[Dict[str, Any]]:
-        """Calculate SHAP feature importance analysis."""
-        if self.shap_explainer is not None:
-            try:
-                features_scaled = self.scaler.transform([features]) if self.scaler else [features]
-                shap_values = self.shap_explainer.shap_values(features_scaled)[1]
-
-                explanations = []
-                for i, (feature, value) in enumerate(zip(FEATURE_NAMES, features)):
-                    shap_value = shap_values[0][i]
-                    explanations.append({
-                        'feature': feature,
-                        'value': round(shap_value, 3),
-                        'impact': 'positive' if shap_value > 0 else 'negative',
-                        'importance': abs(shap_value)
-                    })
-
-                explanations.sort(key=lambda x: x['importance'], reverse=True)
-                return explanations[:9]
-            except Exception as e:
-                logger.error(f"SHAP calculation error: {e}")
-
-        # Fallback SHAP calculation
-        return self._mock_shap_calculation(features)
-
-    def _mock_shap_calculation(self, features: List[float]) -> List[Dict[str, Any]]:
-        """Enhanced SHAP calculation based on pancreatic cancer research."""
-        # Normal values for comparison
-        normal_values = [6.5, 4.5, 250, 140, 42, 9.5, 14, 0.5, 0.03, 0.8, 5.0, 28, 12]
-        shap_values = []
-
-        wbc, rbc, plt, hgb, hct, mpv, pdw, mono, baso_abs, baso_pct, glucose, act, bilirubin = features
-
-        # Calculate SHAP values based on pancreatic cancer research
-        feature_impacts = [
-            # WBC - Leukocytosis/leukopenia
-            (wbc - normal_values[0]) * 0.02 if wbc > 9.0 or wbc < 4.5 else (wbc - normal_values[0]) * 0.01,
-            # RBC - Usually normal in early stages
-            (rbc - normal_values[1]) * 0.005,
-            # PLT - Thrombocytosis/thrombocytopenia
-            (plt - normal_values[2]) * 0.0008 if plt > 350 or plt < 180 else (plt - normal_values[2]) * 0.0002,
-            # HGB - Anemia
-            (normal_values[3] - hgb) * 0.003 if hgb < 130 else (normal_values[3] - hgb) * 0.001,
-            # HCT - Related to HGB
-            (normal_values[4] - hct) * 0.01 if hct < 38 else (normal_values[4] - hct) * 0.003,
-            # MPV - Platelet size
-            (mpv - normal_values[5]) * 0.05 if mpv > 10.0 else (mpv - normal_values[5]) * 0.01,
-            # PDW - Platelet distribution
-            (pdw - normal_values[6]) * 0.02,
-            # MONO - Monocytosis
-            (mono - normal_values[7]) * 0.3 if mono > 0.6 else (mono - normal_values[7]) * 0.1,
-            # BASO_ABS - Usually minimal impact
-            (baso_abs - normal_values[8]) * 0.5,
-            # BASO_PCT - Usually minimal impact
-            (baso_pct - normal_values[9]) * 0.1,
-            # GLUCOSE - Diabetes/impaired glucose
-            (glucose - normal_values[10]) * 0.15 if glucose > 6.5 else (glucose - normal_values[10]) * 0.05,
-            # ACT - Coagulation
-            (act - normal_values[11]) * 0.01 if act > 35 else (act - normal_values[11]) * 0.005,
-            # BILIRUBIN - Jaundice (major indicator)
-            (bilirubin - normal_values[12]) * 0.08 if bilirubin > 20 else (bilirubin - normal_values[12]) * 0.03,
-        ]
-
-        for i, (feature_name, impact_value) in enumerate(zip(FEATURE_NAMES, feature_impacts)):
-            # Add deterministic variation based on feature magnitude and index
-            raw_value = features[i] if i < len(features) else 0.0
-            noise = math.sin((raw_value + 1) * (i + 1) * 0.37) * 0.006
-            final_value = impact_value + noise
-
-            shap_values.append({
-                'feature': feature_name,
-                'value': round(final_value, 3),
-                'impact': 'positive' if final_value > 0 else 'negative',
-                'importance': abs(final_value)
-            })
-
-        shap_values.sort(key=lambda x: x['importance'], reverse=True)
-        return shap_values[:9]
-
-    def generate_clinical_commentary(self, prediction: int, probability: float,
-                                     shap_values: List[Dict], patient_data: List[float],
-                                     language: str = 'en', client_type: str = 'patient') -> str:
-        """Generate AI-powered clinical commentary tailored to the audience."""
-        language = (language or 'en').lower()
-        audience = (client_type or 'patient').lower()
-        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
-        if groq_client is None:
-            return self._generate_fallback_commentary(
-                prediction, probability, shap_values, language=language, client_type=audience
-            )
-
-        try:
-            risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
-            top_factors = [sv['feature'] for sv in shap_values[:3]]
-            language_instruction = "Respond in Russian (Cyrillic script) and keep all clinical terminology accurate." if language.startswith('ru') else "Respond in English."
-            if is_professional:
-                audience_instruction = (
-                    "Primary audience: board-certified gastroenterologist, oncologist, or hepatobiliary surgeon. Use guideline-aligned language, cite key thresholds (NCCN v2.2024, ASCO 2023, ESMO 2023) where relevant, and clearly map each SHAP driver to underlying pathophysiology, differential, and perioperative concerns. Provide a comprehensive, consult-quality narrative that anticipates next diagnostic and management steps."
-                )
-                response_structure = """Please provide:
-1. Diagnostic synthesis (3-4 sentences) covering risk level, likely staging considerations, and whether findings align with NCCN high-risk triggers.
-2. Comparative interpretation of the top SHAP drivers that references guideline thresholds, plausible confounders, and how each should influence the workup (bullet list).
-3. Detailed diagnostic pathway enumerating imaging, labs, and procedural steps with responsible service, timing, and escalation criteria; include contingency plans if results are equivocal.
-4. Multidisciplinary coordination plan addressing referrals (oncology, surgery, genetics, endocrinology), perioperative optimization, and patient counseling points for shared decision-making.
-5. Follow-up cadence outlining short-, intermediate-, and long-term surveillance, including potential clinical trial enrollment, nutrition/supportive care resources, and documentation reminders."""
-            else:
-                audience_instruction = (
-                    "Primary audience: patient or caregiver with no medical background. Be empathetic, motivating, and crystal clear. Explain the risk in everyday language, translate each SHAP factor into real-world meaning, and provide an actionable step-by-step roadmap that helps them feel prepared before seeing their doctor. Highlight warning signs, emotional support tips, and ways to stay engaged in their care."
-                )
-                response_structure = """Please provide:
-1. Plain-language overview (3-4 short sentences) that explains the result, reassures the patient, and sets expectations for the doctor visit.
-2. Friendly explanation of each top factor using everyday analogies, noting whether it pushes risk up or helps protect, and what the patient can do about it (bullet list).
-3. Detailed next-step checklist with timing, including what to tell the doctor, tests to expect, and how to prepare questions or medical records before the appointment.
-4. Clear list of urgent warning signs, what they look like, and exactly who to contact (doctor, urgent care, emergency services).
-5. Lifestyle and emotional support guidance covering diet, movement, stress management, caregiver support, reputable resources, and a closing reminder that the final diagnosis comes from their medical team."""
-
-            prompt = f"""You are a medical AI assistant analyzing pancreatic cancer risk assessment results.
-
-MODEL PREDICTION: {'High Risk - Further Evaluation Recommended' if prediction == 1 else 'Low Risk Assessment'}
-RISK PROBABILITY: {probability:.1%}
-RISK LEVEL: {risk_level}
-
-TOP CONTRIBUTING FACTORS:
-{chr(10).join([f"- {factor}: {sv['value']:.3f} ({sv['impact']} impact)" for factor, sv in zip(top_factors, shap_values[:3])])}
-
+﻿"""
+
+DiagnoAI Pancreas - Professional Flask Backend API
+
+
+
+Advanced medical diagnostic system with:
+
+- Professional Flask API with comprehensive error handling
+
+- Integration with advanced ML model and SHAP analysis
+
+- AI-powered clinical commentary generation
+
+- Medical data validation and security
+
+- HIPAA-compliant data handling
+
+
+
+Author: DiagnoAI Medical Systems
+
+Version: 2.1.0
+
+License: Medical Device Software
+
+"""
+
+
+
+from flask import Flask, request, jsonify, send_file
+
+from flask_cors import CORS
+
+import numpy as np
+
+import joblib
+
+import shap
+
+from groq import Groq
+
+import os
+
+import sys
+
+import logging
+
+from datetime import datetime
+
+from typing import Dict, Any, List
+
+from dotenv import load_dotenv
+
+import traceback
+
+from io import BytesIO
+
+from fpdf import FPDF
+
+import math
+
+
+
+try:
+
+    from guidelines import (
+
+        GUIDELINE_SOURCES,
+
+        LAB_THRESHOLDS,
+
+        IMAGING_PATHWAYS,
+
+        HIGH_RISK_CRITERIA,
+
+        FOLLOW_UP_WINDOWS,
+
+    )
+
+except ImportError:  # pragma: no cover
+
+    from .guidelines import (  # type: ignore
+
+        GUIDELINE_SOURCES,
+
+        LAB_THRESHOLDS,
+
+        IMAGING_PATHWAYS,
+
+        HIGH_RISK_CRITERIA,
+
+        FOLLOW_UP_WINDOWS,
+
+    )
+
+
+
+# Load environment variables
+
+load_dotenv()
+
+
+
+# Configure logging
+
+logging.basicConfig(
+
+    level=logging.INFO,
+
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+)
+
+logger = logging.getLogger(__name__)
+
+
+
+# Initialize Flask app
+
+app = Flask(__name__)
+
+app.config['JSON_SORT_KEYS'] = False
+
+
+
+# CORS configuration for medical applications
+
+CORS(app, origins=[
+
+    "http://localhost:3000",
+
+    "http://localhost:5173", 
+
+    "http://127.0.0.1:3000",
+
+    "http://127.0.0.1:5173"
+
+])
+
+
+
+# Initialize AI client for clinical commentary
+
+try:
+
+    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+    logger.info("AI client initialized successfully")
+
+except Exception as e:
+
+    logger.warning(f"AI client initialization failed: {e}")
+
+    groq_client = None
+
+
+
+# Medical reference ranges for validation
+
+MEDICAL_RANGES = {
+
+    'wbc': (4.0, 11.0),      # White Blood Cells (10^9/L)
+
+    'rbc': (4.0, 5.5),       # Red Blood Cells (10^12/L)
+
+    'plt': (150, 450),       # Platelets (10^9/L)
+
+    'hgb': (120, 160),       # Hemoglobin (g/L)
+
+    'hct': (36, 46),         # Hematocrit (%)
+
+    'mpv': (7.4, 10.4),      # Mean Platelet Volume (fL)
+
+    'pdw': (10, 18),         # Platelet Distribution Width (%)
+
+    'mono': (0.2, 0.8),      # Monocytes (10^9/L)
+
+    'baso_abs': (0.0, 0.1),  # Basophils Absolute (10^9/L)
+
+    'baso_pct': (0.0, 2.0),  # Basophils Percentage (%)
+
+    'glucose': (3.9, 5.6),   # Glucose (mmol/L)
+
+    'act': (10, 40),         # ACT (seconds)
+
+    'bilirubin': (5, 21)     # Bilirubin (umol/L)
+
+}
+
+
+
+FEATURE_NAMES = ['WBC', 'RBC', 'PLT', 'HGB', 'HCT', 'MPV', 'PDW', 
+
+                 'MONO', 'BASO_ABS', 'BASO_PCT', 'GLUCOSE', 'ACT', 'BILIRUBIN']
+
+
+
+FEATURE_DEFAULTS = [
+    ('wbc', 5.8),
+    ('rbc', 4.0),
+    ('plt', 184.0),
+    ('hgb', 127.0),
+    ('hct', 40.0),
+
+    ('mpv', 11.0),
+
+    ('pdw', 16.0),
+
+    ('mono', 0.42),
+
+    ('baso_abs', 0.01),
+
+    ('baso_pct', 0.2),
+
+    ('glucose', 6.3),
+
+    ('act', 26.0),
+
+    ('bilirubin', 17.0)
+]
+
+def rebuild_feature_vector(values: Dict[str, Any] | None) -> list[float]:
+    """Reconstruct feature vector in canonical order from a mapping of patient values."""
+    vector: list[float] = []
+    for key, default in FEATURE_DEFAULTS:
+        if not values:
+            vector.append(float(default))
+            continue
+        raw_value = values.get(key)
+        if raw_value is None:
+            vector.append(float(default))
+            continue
+        try:
+            vector.append(float(raw_value))
+        except (TypeError, ValueError):
+            vector.append(float(default))
+    return vector
+
+
+FEATURE_LABELS = {
+    'en': {
+        'WBC': 'White blood cell count',
+        'RBC': 'Red blood cell count',
+        'PLT': 'Platelets',
+        'HGB': 'Hemoglobin',
+        'HCT': 'Hematocrit',
+        'MPV': 'Mean platelet volume',
+        'PDW': 'Platelet distribution width',
+        'MONO': 'Monocytes fraction',
+        'BASO_ABS': 'Basophils (absolute)',
+        'BASO_PCT': 'Basophils (%)',
+        'GLUCOSE': 'Fasting glucose',
+        'ACT': 'Activated clotting time',
+        'BILIRUBIN': 'Total bilirubin'
+    },
+    'ru': {
+        'WBC': 'Количество лейкоцитов',
+        'RBC': 'Количество эритроцитов',
+        'PLT': 'Тромбоциты',
+        'HGB': 'Гемоглобин',
+        'HCT': 'Гематокрит',
+        'MPV': 'Средний объём тромбоцитов',
+        'PDW': 'Ширина распределения тромбоцитов',
+        'MONO': 'Доля моноцитов',
+        'BASO_ABS': 'Базофилы (абс.)',
+        'BASO_PCT': 'Базофилы (%)',
+        'GLUCOSE': 'Глюкоза натощак',
+        'ACT': 'Активированное время свертывания',
+        'BILIRUBIN': 'Общий билирубин'
+    }
+}
+
+COMMENTARY_LOCALE = {
+    'en': {
+        'risk_labels': {'High': 'HIGH', 'Moderate': 'MODERATE', 'Low': 'LOW'},
+        'probability_label': 'Risk probability',
+        'language_prompt': 'Respond in English with precise clinical terminology.',
+        'professional': {
+            'header_template': 'CLINICAL DOSSIER | {risk} RISK',
+            'probability_label': 'Risk probability',
+            'drivers_title': 'PRIMARY SIGNAL DRIVERS',
+            'impact_terms': {
+                'positive': 'elevates risk',
+                'negative': 'reduces risk pressure',
+                'neutral': 'neutral contribution'
+            },
+            'default_driver': 'Additional biomarker within reference range',
+            'synopsis_title': 'CLINICAL SYNOPSIS',
+            'synopsis': {
+                'High': 'SHAP signal clustering mirrors malignant-leaning physiology. Fast-track staging to clarify obstructive, infiltrative, or metastatic pathways.',
+                'Moderate': 'Risk profile indicates intermediate malignant probability. Align further workup with symptom trajectory, metabolic risks, and shared decision-making.',
+                'Low': 'Biomarkers align with low malignant probability. Continue surveillance for phenotypic drift, especially in hereditary or metabolic cohorts.'
+            },
+            'actions_title': 'GUIDELINE-ALIGNED ACTIONS',
+            'actions': {
+                'High': [
+                    'Order contrast-enhanced pancreatic protocol CT or MRI within 7 days.',
+                    'Arrange endoscopic ultrasound with fine-needle aspiration if cross-sectional imaging remains indeterminate.',
+                    'Collect tumor markers (CA 19-9, CEA, CA-125) plus comprehensive metabolic and coagulation panels.',
+                    'Screen for hereditary syndromes; counsel on germline testing (BRCA1/2, PALB2) when family history warrants.'
+                ],
+                'Moderate': [
+                    'Schedule pancreatic-focused CT or MRI within 2-4 weeks in line with symptom intensity.',
+                    'Trend tumor markers and metabolic labs; repeat sooner when abnormalities evolve.',
+                    'Review pancreatitis history, glycemic control, and weight shifts to refine differential diagnoses.',
+                    'Document red-flag symptoms and provide expedited return precautions.'
+                ],
+                'Low': [
+                    'Maintain annual pancreatic imaging, sooner if clinical status changes.',
+                    'Update comprehensive metabolic lab panel at routine visits and compare against prior baselines.',
+                    'Continue lifestyle risk mitigation (tobacco cessation, moderated alcohol intake, weight optimization).',
+                    'Educate on symptom triggers that justify earlier re-evaluation.'
+                ]
+            },
+            'coordination_title': 'COORDINATION & COUNSELING',
+            'coordination': {
+                'High': [
+                    'Engage hepatobiliary surgery and medical oncology teams for joint planning.',
+                    'Loop in nutrition, pain, and psychosocial support services early.',
+                    'Coordinate genetics consultation if familial aggregation or early-onset disease is suspected.'
+                ],
+                'Moderate': [
+                    'Share the summary with gastroenterology and primary care for integrated monitoring.',
+                    'Discuss surveillance cadence with radiology to secure imaging access.',
+                    'Offer supportive care referrals (nutrition, behavioral health) tailored to comorbid risks.'
+                ],
+                'Low': [
+                    'Communicate findings to primary care with emphasis on routine surveillance.',
+                    'Provide educational materials outlining symptoms that merit rapid escalation.',
+                    'Encourage enrollment in risk-reduction programs or registries when available.'
+                ]
+            },
+            'monitoring_title': 'MONITORING TIMELINE',
+            'monitoring': {
+                'High': [
+                    'Day 0-7: finalize imaging and cytology pathway.',
+                    'Week 2-4: review multidisciplinary findings and determine surgical versus systemic plan.',
+                    'Quarterly: reassess biomarkers, glycemic profile, and cachexia indicators.'
+                ],
+                'Moderate': [
+                    'Month 1: update labs and review the symptom trajectory.',
+                    'Month 2-3: repeat imaging if biomarkers trend upward or new pain emerges.',
+                    'Semiannual: formal reassessment with oncology or gastroenterology.'
+                ],
+                'Low': [
+                    'Every 6-12 months: surveillance labs and imaging per guideline thresholds.',
+                    'Each visit: screen for pancreatitis flares, diabetes shifts, or weight changes.',
+                    'Re-evaluate sooner with family history updates or new high-risk exposures.'
+                ]
+            },
+            'reminder_title': 'SAFE PRACTICE REMINDER',
+            'reminder_text': 'Clinical decisions remain with the treating physician. Document shared decision-making.',
+            'audience_guidance': 'Primary audience: gastroenterology, oncology, and hepatobiliary specialists. Cite guidelines (NCCN v2.2024, ASCO 2023, ESMO 2023) when recommending pathways.',
+            'outline_template': (
+                "Structure the answer with the exact uppercase headings shown below, separated by single blank lines. "
+                "Use crisp clinical language and tie recommendations to guideline concepts.\n"
+                "{header}\n"
+                "{probability_label}: <state probability as a percentage>\n\n"
+                "PRIMARY SIGNAL DRIVERS\n"
+                "- Provide three bullet points linking each top factor to its pathophysiology and required follow-up.\n\n"
+                "CLINICAL SYNOPSIS\n"
+                "- Deliver a 2-3 sentence synthesis referencing guideline triggers and differentials.\n\n"
+                "GUIDELINE-ALIGNED ACTIONS\n"
+                "- List 3-4 action items with timing and responsible services.\n\n"
+                "COORDINATION & COUNSELING\n"
+                "- Outline multidisciplinary coordination and counseling priorities.\n\n"
+                "MONITORING TIMELINE\n"
+                "- Present staged follow-up checkpoints.\n\n"
+                "SAFE PRACTICE REMINDER\n"
+                "- End with one sentence reinforcing clinician oversight."
+            )
+        },
+        'patient': {
+            'header_template': 'PERSONAL REPORT | {risk} RISK',
+            'probability_label': 'Screening probability',
+            'drivers_title': 'SIGNAL HIGHLIGHTS',
+            'impact_terms': {
+                'positive': 'raises concern',
+                'negative': 'offers protection',
+                'neutral': 'steady influence'
+            },
+            'default_driver': 'Additional supportive marker within the normal range',
+            'core_title': 'CORE MESSAGE',
+            'core_message': {
+                'High': 'The AI sees a high chance that something serious could be affecting the pancreas ({probability}). This is not a diagnosis, but it means follow-up testing should happen right away.',
+                'Moderate': 'The AI sees a moderate chance of pancreatic issues ({probability}). Staying alert and coordinating next steps with your doctor is important.',
+                'Low': 'The AI sees a low chance of pancreatic cancer right now ({probability}). That is encouraging, but keep sharing updates with your care team.'
+            },
+            'next_steps_title': 'NEXT STEPS',
+            'next_steps': {
+                'High': [
+                    'Book a specialist visit within 1-2 weeks and share this report.',
+                    'Expect detailed scans such as CT or MRI and possibly an endoscopic ultrasound.',
+                    'Ask about blood tests (for example CA 19-9) that can clarify the picture.',
+                    'Write down new symptoms, medications, and family history to discuss during the visit.'
+                ],
+                'Moderate': [
+                    'Schedule a follow-up appointment in the coming weeks to review results.',
+                    'Discuss whether imaging or repeat blood work is needed based on symptoms.',
+                    'Track any digestion changes, weight shifts, or energy loss and report them.',
+                    'Keep copies of prior labs and imaging to help your doctor compare trends.'
+                ],
+                'Low': [
+                    'Share this summary during your next routine appointment.',
+                    'Continue annual checkups and any imaging your doctor recommends.',
+                    'Maintain healthy habits—balanced nutrition, regular activity, smoke-free living.',
+                    'Stay alert to new symptoms and contact your doctor if anything changes.'
+                ]
+            },
+            'warnings_title': 'ALERT SYMPTOMS',
+            'warning_signs': [
+                'Yellowing of the skin or eyes.',
+                'Strong belly or back pain that does not ease.',
+                'Very dark urine, pale stools, or sudden unexplained weight loss.',
+                'Frequent nausea, vomiting, or a sudden spike in blood sugar levels.'
+            ],
+            'support_title': 'SUPPORT & RESOURCES',
+            'support': [
+                'Lean on family, friends, or support groups for encouragement.',
+                'Focus on gentle nutrition, hydration, and rest while awaiting next steps.',
+                'Call your doctor or emergency services if severe warning signs appear.'
+            ],
+            'reminder_title': 'CARE REMINDER',
+            'reminder_text': 'Bring this report to your medical team. They will confirm the diagnosis and guide treatment.',
+            'audience_guidance': 'Primary audience: patient or caregiver. Use encouraging, clear language while keeping explanations medically accurate.',
+            'outline_template': (
+                "Deliver the response using the exact headings below, each separated by a single blank line. "
+                "Keep the tone compassionate, actionable, and easy to follow.\n"
+                "{header}\n"
+                "{probability_label}: <state probability as a percentage>\n\n"
+                "CORE MESSAGE\n"
+                "- Provide a reassuring 3-4 sentence overview in everyday language.\n\n"
+                "SIGNAL HIGHLIGHTS\n"
+                "- Use three bullet points to explain what each top factor means and how to respond.\n\n"
+                "NEXT STEPS\n"
+                "- Give a step-by-step checklist with timing and what to prepare.\n\n"
+                "ALERT SYMPTOMS\n"
+                "- List critical warning signs and who to contact.\n\n"
+                "SUPPORT & RESOURCES\n"
+                "- Share lifestyle and emotional support tips.\n\n"
+                "CARE REMINDER\n"
+                "- End with one sentence pointing back to the clinical team."
+            )
+        }
+    },
+    'ru': {
+        'risk_labels': {'High': 'ВЫСОКИЙ', 'Moderate': 'УМЕРЕННЫЙ', 'Low': 'НИЗКИЙ'},
+        'probability_label': 'Вероятность риска',
+        'language_prompt': 'Отвечай на русском языке, используя точную клиническую терминологию.',
+        'professional': {
+            'header_template': 'КЛИНИЧЕСКИЙ ОТЧЁТ | {risk} РИСК',
+            'probability_label': 'Вероятность риска',
+            'drivers_title': 'ОСНОВНЫЕ ФАКТОРЫ',
+            'impact_terms': {
+                'positive': 'усиливает риск',
+                'negative': 'снижает риск',
+                'neutral': 'нейтральное влияние'
+            },
+            'default_driver': 'Дополнительный биомаркер в пределах нормы',
+            'synopsis_title': 'КЛИНИЧЕСКИЙ ОБЗОР',
+            'synopsis': {
+                'High': 'Распределение SHAP соответствует физиологии с высоким риском злокачественности. Нужно ускорить стадирование, чтобы исключить обструктивные, инфильтративные или метастатические процессы.',
+                'Moderate': 'Профиль риска указывает на промежуточную вероятность злокачественного процесса. Согласуйте дальнейшую диагностику с симптоматикой, метаболическими факторами и совместным планированием.',
+                'Low': 'Биомаркеры соответствуют низкой вероятности злокачественного процесса. Продолжайте наблюдение за фенотипическими изменениями, особенно при наследственной или метаболической предрасположенности.'
+            },
+            'actions_title': 'РЕКОМЕНДУЕМЫЕ ДЕЙСТВИЯ',
+            'actions': {
+                'High': [
+                    'Назначьте контрастную КТ или МРТ поджелудочной железы в кратчайшие сроки (до 7 дней).',
+                    'Проведите эндоскопическое ультразвуковое исследование с тонкоигольной биопсией при неясности данных визуализации.',
+                    'Определите опухолевые маркеры (CA 19-9, CEA, CA-125), а также полный метаболический и коагуляционный профиль.',
+                    'Рассмотрите наследственные синдромы; при соответствующем анамнезе обсудите герминальное тестирование (BRCA1/2, PALB2).'
+                ],
+                'Moderate': [
+                    'Запланируйте прицельную КТ или МРТ поджелудочной железы в течение 2-4 недель в зависимости от клиники.',
+                    'Отслеживайте динамику опухолевых маркеров и метаболических показателей; повторяйте ранее при ухудшении.',
+                    'Оцените анамнез панкреатита, гликемический контроль и изменения массы тела для уточнения дифференциала.',
+                    'Зафиксируйте тревожные симптомы и обеспечьте быстрый маршрут повторного обращения.'
+                ],
+                'Low': [
+                    'Сохраняйте ежегодное визуализирующее наблюдение, ускоряйте при изменении клинической картины.',
+                    'Обновляйте расширенные лабораторные показатели на плановых визитах, сравнивая с предыдущими.',
+                    'Продолжайте модификацию факторов риска (отказ от табака, ограничение алкоголя, контроль массы тела).',
+                    'Поясните, какие симптомы требуют досрочного обследования.'
+                ]
+            },
+            'coordination_title': 'КОМАНДНАЯ КООРДИНАЦИЯ',
+            'coordination': {
+                'High': [
+                    'Подключите команды гепатопанкреатобилиарной хирургии и онкологии для совместного планирования.',
+                    'Раннее вовлеките специалистов по питанию, обезболиванию и психосоциальной поддержке.',
+                    'Организуйте консультацию генетика при семейной агрегации или раннем дебюте заболевания.'
+                ],
+                'Moderate': [
+                    'Передайте сводку гастроэнтерологу и врачу первичного звена для координированного наблюдения.',
+                    'Обсудите с радиологами график наблюдения для своевременного доступа к исследованиям.',
+                    'Предложите поддерживающие ресурсы (диетология, психологическая помощь) с учётом сопутствующих рисков.'
+                ],
+                'Low': [
+                    'Сообщите результаты врачу первичного звена с акцентом на плановое наблюдение.',
+                    'Предоставьте обучающие материалы по симптомам, требующим срочной реакции.',
+                    'Рекомендуйте участие в программах снижения риска или регистрах при возможности.'
+                ]
+            },
+            'monitoring_title': 'ПЛАН МОНИТОРИНГА',
+            'monitoring': {
+                'High': [
+                    'День 0-7: завершить визуализацию и цитологическую верификацию.',
+                    'Неделя 2-4: обсудить результаты на мультидисциплинарном консилиуме и определить хирургическую или системную тактику.',
+                    'Ежеквартально: пересматривать биомаркеры, гликемию и признаки кахексии.'
+                ],
+                'Moderate': [
+                    'Месяц 1: обновить лабораторные данные и оценить динамику симптомов.',
+                    'Месяцы 2-3: повторить визуализацию при росте маркеров или появлении боли.',
+                    'Раз в полгода: формализованная переоценка у онколога или гастроэнтеролога.'
+                ],
+                'Low': [
+                    'Каждые 6-12 месяцев: лабораторный и визуализирующий контроль по рекомендациям.',
+                    'Каждый визит: мониторинг панкреатита, гликемического статуса и массы тела.',
+                    'Досрочная оценка при изменении семейного анамнеза или появлении новых факторов риска.'
+                ]
+            },
+            'reminder_title': 'ПРОФЕССИОНАЛЬНОЕ НАПОМИНАНИЕ',
+            'reminder_text': 'Окончательные решения принимает лечащий врач. Документируйте совместное обсуждение.',
+            'audience_guidance': 'Основная аудитория: специалисты по гастроэнтерологии, онкологии и ГПБ-хирургии. Соотносите рекомендации с NCCN v2.2024, ASCO 2023 и ESMO 2023.',
+            'outline_template': (
+                "Используйте точную структуру с заголовками заглавными буквами и одним пустым строком между блоками. "
+                "Излагайте рекомендации, опираясь на клинические руководства.\n"
+                "{header}\n"
+                "{probability_label}: <укажите вероятность в процентах>\n\n"
+                "ОСНОВНЫЕ ФАКТОРЫ\n"
+                "- Дайте три пункта, связывающие каждый фактор с патофизиологией и необходимыми действиями.\n\n"
+                "КЛИНИЧЕСКИЙ ОБЗОР\n"
+                "- Представьте 2-3 предложения с упоминанием триггеров из руководств и дифференциальных диагнозов.\n\n"
+                "РЕКОМЕНДУЕМЫЕ ДЕЙСТВИЯ\n"
+                "- Перечислите 3-4 шага с указанием сроков и ответственных специалистов.\n\n"
+                "КОМАНДНАЯ КООРДИНАЦИЯ\n"
+                "- Опишите необходимость мультидисциплинарного взаимодействия и консультаций.\n\n"
+                "ПЛАН МОНИТОРИНГА\n"
+                "- Обозначьте контрольные точки наблюдения.\n\n"
+                "ПРОФЕССИОНАЛЬНОЕ НАПОМИНАНИЕ\n"
+                "- Завершите фразой о ведущей роли клинициста."
+            )
+        },
+        'patient': {
+            'header_template': 'ПЕРСОНАЛЬНЫЙ ОТЧЁТ | {risk} РИСК',
+            'probability_label': 'Оценка риска',
+            'drivers_title': 'КЛЮЧЕВЫЕ СИГНАЛЫ',
+            'impact_terms': {
+                'positive': 'повышает осторожность',
+                'negative': 'работает в пользу защиты',
+                'neutral': 'нейтральное влияние'
+            },
+            'default_driver': 'Дополнительный показатель в пределах нормы',
+            'core_title': 'ГЛАВНОЕ',
+            'core_message': {
+                'High': 'Алгоритм оценивает высокий риск ({probability}) значимого поражения поджелудочной железы. Это не диагноз, но повод пройти углублённое обследование без промедления.',
+                'Moderate': 'Алгоритм видит умеренный риск ({probability}) возможных проблем с поджелудочной железой. Важно держать связь с врачом и выполнить рекомендованные шаги.',
+                'Low': 'Алгоритм показывает низкий риск ({probability}) на текущий момент. Это обнадёживает, но продолжайте плановые консультации с медиками.'
+            },
+            'next_steps_title': 'БЛИЖАЙШИЕ ШАГИ',
+            'next_steps': {
+                'High': [
+                    'Запишитесь к профильному специалисту в течение 1-2 недель и возьмите отчёт с собой.',
+                    'Будьте готовы к детальным исследованиям (КТ, МРТ) и, возможно, эндоскопическому УЗИ.',
+                    'Уточните необходимость анализов крови (например, CA 19-9), помогающих уточнить диагноз.',
+                    'Запишите новые симптомы, лекарства и семейный анамнез для обсуждения на приёме.'
+                ],
+                'Moderate': [
+                    'Назначьте контрольный визит в ближайшие недели, чтобы обсудить результаты.',
+                    'Обсудите с врачом необходимость визуализации или повторных анализов с учётом симптомов.',
+                    'Отслеживайте изменения пищеварения, массы тела и уровня энергии и сообщайте врачу.',
+                    'Подготовьте копии прежних анализов и исследований для сравнения.'
+                ],
+                'Low': [
+                    'Обсудите отчёт на ближайшем плановом приёме.',
+                    'Соблюдайте ежегодные обследования и рекомендации врача по визуализации.',
+                    'Поддерживайте здоровый образ жизни: питание, движение, отказ от курения.',
+                    'Следите за новыми симптомами и сообщайте о них при появлении.'
+                ]
+            },
+            'warnings_title': 'ТРЕВОЖНЫЕ СИМПТОМЫ',
+            'warning_signs': [
+                'Пожелтение кожи или глаз.',
+                'Сильная боль в животе или спине, которая не проходит.',
+                'Очень тёмная моча, светлый стул или резкая потеря веса.',
+                'Частая тошнота, рвота или внезапные скачки сахара в крови.'
+            ],
+            'support_title': 'ПОДДЕРЖКА И РЕСУРСЫ',
+            'support': [
+                'Опирайтесь на семью, друзей или группы поддержки для эмоциональной помощи.',
+                'Сосредоточьтесь на щадящем питании, гидратации и отдыхе в ожидании обследований.',
+                'При выраженных тревожных признаках незамедлительно свяжитесь с врачом или службами экстренной помощи.'
+            ],
+            'reminder_title': 'НАПОМИНАНИЕ',
+            'reminder_text': 'Возьмите этот отчёт на консультацию: окончательное решение принимает медицинская команда.',
+            'audience_guidance': 'Основная аудитория: пациент или его близкий. Используйте тёплый и понятный тон, сохраняя медицинскую точность.',
+            'outline_template': (
+                "Представьте ответ с точными заголовками, прописными буквами и одним пустым интервалом между блоками. "
+                "Язык должен быть поддерживающим и понятным.\n"
+                "{header}\n"
+                "{probability_label}: <укажите вероятность в процентах>\n\n"
+                "ГЛАВНОЕ\n"
+                "- Дайте 3-4 предложения простым языком с объяснением результата.\n\n"
+                "КЛЮЧЕВЫЕ СИГНАЛЫ\n"
+                "- Приведите три пункта о главных факторах и что они значат.\n\n"
+                "БЛИЖАЙШИЕ ШАГИ\n"
+                "- Составьте чек-лист с действиями и сроками.\n\n"
+                "ТРЕВОЖНЫЕ СИМПТОМЫ\n"
+                "- Перечислите признаки, при которых нужно срочно обратиться к врачу.\n\n"
+                "ПОДДЕРЖКА И РЕСУРСЫ\n"
+                "- Поделитесь советами по образу жизни и эмоциональной поддержке.\n\n"
+                "НАПОМИНАНИЕ\n"
+                "- Завершите предложением о ведущей роли врача."
+            )
+        }
+    }
+}
+
+
+
+class MedicalDiagnosticSystem:
+
+    """Professional medical diagnostic system with ML and AI integration."""
+
+
+
+    def __init__(self):
+
+        self.model = None
+
+        self.scaler = None
+
+        self.shap_explainer = None
+
+        self.model_metrics = {
+
+            'accuracy': 0.942,
+
+            'precision': 0.938,
+
+            'recall': 0.945,
+
+            'f1_score': 0.941,
+
+            'roc_auc': 0.962,
+
+            'specificity': 0.939
+
+        }
+
+        self.guideline_sources = GUIDELINE_SOURCES
+
+        self.lab_thresholds = LAB_THRESHOLDS
+
+        self.imaging_pathways = IMAGING_PATHWAYS
+
+        self.high_risk_criteria = HIGH_RISK_CRITERIA
+
+        self.follow_up_windows = FOLLOW_UP_WINDOWS
+
+        self.load_model()
+
+
+
+    def load_model(self):
+
+        """Load pre-trained model and scaler."""
+
+        try:
+
+            model_path = 'models/random_forest.pkl'
+
+            if os.path.exists(model_path):
+
+                model_data = joblib.load(model_path)
+
+                self.model = model_data.get('model')
+
+                self.scaler = model_data.get('scaler')
+
+                logger.info("Model loaded successfully")
+
+            else:
+
+                logger.warning("Model file not found, using mock predictions")
+
+                self.model = None
+
+        except Exception as e:
+
+            logger.error(f"Error loading model: {e}")
+
+            self.model = None
+
+
+
+    def validate_medical_data(self, data: Dict[str, float]) -> tuple[bool, List[str]]:
+
+        """Validate medical data against reference ranges."""
+
+        errors = []
+
+
+
+        for feature, value in data.items():
+
+            if feature in MEDICAL_RANGES:
+
+                min_val, max_val = MEDICAL_RANGES[feature]
+
+                if not (min_val <= value <= max_val):
+
+                    errors.append(f"{feature.upper()}: {value} outside normal range ({min_val}-{max_val})")
+
+
+
+        return len(errors) == 0, errors
+
+
+
+    def predict_cancer_risk(self, features: List[float]) -> tuple[int, float]:
+
+        """Make cancer risk prediction."""
+
+        if self.model is not None:
+
+            try:
+
+                # Scale features if scaler is available
+
+                if self.scaler is not None:
+
+                    features_scaled = self.scaler.transform([features])
+
+                else:
+
+                    features_scaled = [features]
+
+
+
+                prediction = self.model.predict(features_scaled)[0]
+
+                probability = self.model.predict_proba(features_scaled)[0][1]
+
+                return int(prediction), float(probability)
+
+            except Exception as e:
+
+                logger.error(f"Model prediction error: {e}")
+
+
+
+        # Fallback to rule-based prediction
+
+        return self._rule_based_prediction(features)
+
+
+
+    def _rule_based_prediction(self, features: List[float]) -> tuple[int, float]:
+
+        """Enhanced rule-based prediction based on pancreatic cancer research."""
+
+        risk_score = 0.0
+
+
+
+        # Based on research: pancreatic cancer markers
+
+        wbc, rbc, plt, hgb, hct, mpv, pdw, mono, baso_abs, baso_pct, glucose, act, bilirubin = features
+
+
+
+        # Primary risk factors from research
+
+        if bilirubin > 20:  # Bilirubin elevated (jaundice common in pancreatic cancer)
+
+            risk_score += 0.35
+
+        elif bilirubin > 15:
+
+            risk_score += 0.2
+
+
+
+        if glucose > 6.5:  # Diabetes/impaired glucose tolerance
+
+            risk_score += 0.25
+
+        elif glucose > 5.8:
+
+            risk_score += 0.15
+
+
+
+        if plt > 350:  # Thrombocytosis
+
+            risk_score += 0.2
+
+        elif plt < 180:  # Thrombocytopenia
+
+            risk_score += 0.15
+
+
+
+        if wbc > 9.0:  # Leukocytosis
+
+            risk_score += 0.15
+
+        elif wbc < 4.5:  # Leukopenia
+
+            risk_score += 0.1
+
+
+
+        if hgb < 130:  # Anemia
+
+            risk_score += 0.15
+
+        elif hgb < 110:
+
+            risk_score += 0.25
+
+
+
+        if act > 35:  # Coagulation abnormalities
+
+            risk_score += 0.1
+
+
+
+        if mpv > 10.0:  # Platelet size changes
+
+            risk_score += 0.1
+
+
+
+        if mono > 0.6:  # Monocytosis
+
+            risk_score += 0.1
+
+
+
+        # Deterministic probability mapping using logistic scaling
+
+        scaled_score = max(-3.0, min(3.0, risk_score * 3.0 - 1.0))
+
+        probability = 1 / (1 + math.exp(-scaled_score))
+
+        probability = max(0.1, min(0.95, probability))
+
+
+
+        prediction = 1 if probability > 0.5 else 0
+
+
+
+        return prediction, probability
+
+
+
+    def calculate_shap_analysis(self, features: List[float], prediction: int) -> List[Dict[str, Any]]:
+
+        """Calculate SHAP feature importance analysis."""
+
+        if self.shap_explainer is not None:
+
+            try:
+
+                features_scaled = self.scaler.transform([features]) if self.scaler else [features]
+
+                shap_values = self.shap_explainer.shap_values(features_scaled)[1]
+
+
+
+                explanations = []
+
+                for i, (feature, value) in enumerate(zip(FEATURE_NAMES, features)):
+
+                    shap_value = shap_values[0][i]
+
+                    explanations.append({
+
+                        'feature': feature,
+
+                        'value': round(shap_value, 3),
+
+                        'impact': 'positive' if shap_value > 0 else 'negative',
+
+                        'importance': abs(shap_value)
+
+                    })
+
+
+
+                explanations.sort(key=lambda x: x['importance'], reverse=True)
+
+                return explanations[:9]
+
+            except Exception as e:
+
+                logger.error(f"SHAP calculation error: {e}")
+
+
+
+        # Fallback SHAP calculation
+
+        return self._mock_shap_calculation(features)
+
+
+
+    def _mock_shap_calculation(self, features: List[float]) -> List[Dict[str, Any]]:
+
+        """Enhanced SHAP calculation based on pancreatic cancer research."""
+
+        # Normal values for comparison
+
+        normal_values = [6.5, 4.5, 250, 140, 42, 9.5, 14, 0.5, 0.03, 0.8, 5.0, 28, 12]
+
+        shap_values = []
+
+
+
+        wbc, rbc, plt, hgb, hct, mpv, pdw, mono, baso_abs, baso_pct, glucose, act, bilirubin = features
+
+
+
+        # Calculate SHAP values based on pancreatic cancer research
+
+        feature_impacts = [
+
+            # WBC - Leukocytosis/leukopenia
+
+            (wbc - normal_values[0]) * 0.02 if wbc > 9.0 or wbc < 4.5 else (wbc - normal_values[0]) * 0.01,
+
+            # RBC - Usually normal in early stages
+
+            (rbc - normal_values[1]) * 0.005,
+
+            # PLT - Thrombocytosis/thrombocytopenia
+
+            (plt - normal_values[2]) * 0.0008 if plt > 350 or plt < 180 else (plt - normal_values[2]) * 0.0002,
+
+            # HGB - Anemia
+
+            (normal_values[3] - hgb) * 0.003 if hgb < 130 else (normal_values[3] - hgb) * 0.001,
+
+            # HCT - Related to HGB
+
+            (normal_values[4] - hct) * 0.01 if hct < 38 else (normal_values[4] - hct) * 0.003,
+
+            # MPV - Platelet size
+
+            (mpv - normal_values[5]) * 0.05 if mpv > 10.0 else (mpv - normal_values[5]) * 0.01,
+
+            # PDW - Platelet distribution
+
+            (pdw - normal_values[6]) * 0.02,
+
+            # MONO - Monocytosis
+
+            (mono - normal_values[7]) * 0.3 if mono > 0.6 else (mono - normal_values[7]) * 0.1,
+
+            # BASO_ABS - Usually minimal impact
+
+            (baso_abs - normal_values[8]) * 0.5,
+
+            # BASO_PCT - Usually minimal impact
+
+            (baso_pct - normal_values[9]) * 0.1,
+
+            # GLUCOSE - Diabetes/impaired glucose
+
+            (glucose - normal_values[10]) * 0.15 if glucose > 6.5 else (glucose - normal_values[10]) * 0.05,
+
+            # ACT - Coagulation
+
+            (act - normal_values[11]) * 0.01 if act > 35 else (act - normal_values[11]) * 0.005,
+
+            # BILIRUBIN - Jaundice (major indicator)
+
+            (bilirubin - normal_values[12]) * 0.08 if bilirubin > 20 else (bilirubin - normal_values[12]) * 0.03,
+
+        ]
+
+
+
+        for i, (feature_name, impact_value) in enumerate(zip(FEATURE_NAMES, feature_impacts)):
+
+            # Add deterministic variation based on feature magnitude and index
+
+            raw_value = features[i] if i < len(features) else 0.0
+
+            noise = math.sin((raw_value + 1) * (i + 1) * 0.37) * 0.006
+
+            final_value = impact_value + noise
+
+
+
+            shap_values.append({
+
+                'feature': feature_name,
+
+                'value': round(final_value, 3),
+
+                'impact': 'positive' if final_value > 0 else 'negative',
+
+                'importance': abs(final_value)
+
+            })
+
+
+
+        shap_values.sort(key=lambda x: x['importance'], reverse=True)
+
+        return shap_values[:9]
+
+
+
+    def generate_clinical_commentary(self, prediction: int, probability: float,
+
+                                     shap_values: List[Dict], patient_data: List[float],
+
+                                     language: str = 'en', client_type: str = 'patient') -> str:
+
+        """Generate AI-powered clinical commentary tailored to the audience."""
+
+        language = (language or 'en').lower()
+
+        audience = (client_type or 'patient').lower()
+
+        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
+        locale_code = 'ru' if language.startswith('ru') else 'en'
+        locale_bundle = COMMENTARY_LOCALE.get(locale_code, COMMENTARY_LOCALE['en'])
+        audience_bundle = locale_bundle['professional'] if is_professional else locale_bundle['patient']
+        probability_label = audience_bundle.get('probability_label', locale_bundle['probability_label'])
+        if groq_client is None:
+
+            return self._generate_fallback_commentary(
+
+                prediction, probability, shap_values, language=language, client_type=audience
+
+            )
+
+
+
+        try:
+
+            risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
+
+            top_factors = [sv['feature'] for sv in shap_values[:3]]
+
+            risk_label = locale_bundle['risk_labels'].get(risk_level, risk_level.upper())
+            header_text = audience_bundle['header_template'].format(risk=risk_label)
+            language_instruction = locale_bundle['language_prompt']
+            audience_instruction = audience_bundle['audience_guidance']
+            response_structure = audience_bundle['outline_template'].format(
+                header=header_text,
+                probability_label=probability_label
+            )
+
+            prompt = f"""You are a medical AI assistant analyzing pancreatic cancer risk assessment results.
+
+MODEL PREDICTION: {'High Risk - Further Evaluation Recommended' if prediction == 1 else 'Low Risk Assessment'}
+RISK PROBABILITY: {probability:.1%}
+RISK LEVEL: {risk_level}
+HEADER TO USE: {header_text}
+PROBABILITY LABEL: {probability_label}
+TOP CONTRIBUTORS: {', '.join(top_factors)}
+
+TOP CONTRIBUTING FACTORS:
+{chr(10).join([f"- {factor}: {sv['value']:.3f} ({sv['impact']} impact)" for factor, sv in zip(top_factors, shap_values[:3])])}
+
 PATIENT LABORATORY VALUES:
 - WBC: {patient_data[0]} (normal: 4-11)
 - PLT: {patient_data[2]} (normal: 150-450)
@@ -366,506 +1079,954 @@ PATIENT LABORATORY VALUES:
 - Glucose: {patient_data[10]} (normal: 3.9-5.6)
 
 {response_structure}
-
+
 Be accurate, align with audience needs, and emphasize that this is a screening tool requiring clinical correlation.
 {audience_instruction}
 {language_instruction}
 Compose a thorough narrative totaling roughly 350-450 words to ensure complete context.
 Keep the structure tidy with no extra blank lines beyond single spacing between sections.
 End with a brief summary reinforcing next steps and that clinical decisions remain with the treating physician."""
-
-            response = groq_client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=600
-            )
-            return response.choices[0].message.content
-
-        except Exception as e:
-            logger.error(f"AI commentary generation error: {e}")
-            return self._generate_fallback_commentary(
-                prediction, probability, shap_values, language=language, client_type=audience
-            )
-
-    def _generate_fallback_commentary(self, prediction: int, probability: float,
-                                      shap_values: List[Dict], language: str = 'en',
-                                      client_type: str = 'patient') -> str:
-        """Generate dynamic clinical commentary based on actual values."""
-        risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
-        audience = (client_type or 'patient').lower()
-        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
-
-        # Get top 3 contributing factors with their actual values
-        top_factors = []
-        for sv in shap_values[:3]:
-            impact_desc = "elevated" if sv['impact'] == 'positive' else "decreased"
-            top_factors.append(f"{sv['feature']}: {impact_desc} ({sv['value']:+.3f} impact)")
-        while len(top_factors) < 3:
-            top_factors.append("Additional biomarker: within reference range")
-
-        if is_professional:
-            if prediction == 1:
-                commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK PROFILE
-
-Risk probability: {probability:.1%}. Principal SHAP drivers:
-- {top_factors[0]}
-- {top_factors[1]}
-- {top_factors[2]}
-
-INTERPRETATION:
-Deviation patterns align with malignant-risk phenotypes. Correlate with clinical presentation (jaundice, cachexia, glycemic shifts) and recent imaging.
-
-DIAGNOSTIC ACTIONS:
-- Contrast-enhanced pancreatic protocol CT or MRI urgently
-- Endoscopic ultrasound with FNA if imaging is suspicious/indeterminate
-- Tumor marker panel (CA 19-9, CEA, CA-125), CMP, and coagulation profile
-- Review familial history; consider germline testing (BRCA1/2, PALB2) where appropriate
-
-CARE COORDINATION:
-- Engage hepatobiliary surgery and oncology teams
-- Arrange nutritional and symptom management support
-- Document shared decision-making and patient counseling
-
-NOTE: Model guidance complements, not replaces, clinician judgement."""
-            else:
-                commentary = f"""CLINICAL ANALYSIS - {risk_level.upper()} RISK PROFILE
-
-Risk probability: {probability:.1%}. Leading biomarkers:
-- {top_factors[0]}
-- {top_factors[1]}
-- {top_factors[2]}
-
-INTERPRETATION:
-Biomarkers remain within acceptable variance for low malignant probability. Continue vigilance in patients with hereditary or metabolic predisposition.
-
-MANAGEMENT:
-- Maintain annual laboratory surveillance; escalate if symptomatic changes occur
-- Optimize metabolic control (glucose, BMI) and address pancreatitis risk factors
-- Reinforce lifestyle counseling: abstain from tobacco, limit alcohol, encourage nutrition review
-
-FOLLOW-UP:
-- Reassess sooner with new symptoms or family history updates
-- Communicate findings with primary care and referring specialists
-
-NOTE: Integrate with imaging, family history, and exam for final assessment."""
-        else:
-            if prediction == 1:
-                commentary = f"""RESULT SUMMARY - {risk_level.upper()} RISK
-
-What it means:
-This screening shows a {risk_level.lower()} chance ({probability:.1%}) that something serious might be affecting your pancreas. It does not confirm cancer, but further testing is important.
-
-Signals the system noticed:
-- {top_factors[0]}
-- {top_factors[1]}
-- {top_factors[2]}
-
-What to do next:
-- Book an appointment with your specialist right away (within the next 1-2 weeks).
-- Expect your doctor to order detailed scans such as a CT or MRI and possibly an endoscopic ultrasound.
-- Ask about extra blood tests (like CA 19-9) that help doctors get clearer answers.
-
-Watch for warning signs: yellow skin or eyes, strong belly or back pain, very dark urine or pale stools, or fast weight loss. Call your doctor or emergency services if these happen.
-
-Remember: Only your healthcare team can make a diagnosis. Take this report with you so you can decide next steps together."""
-            else:
-                commentary = f"""RESULT SUMMARY - {risk_level.upper()} RISK
-
-What it means:
-Your screening points to a {risk_level.lower()} chance ({probability:.1%}) of pancreatic cancer right now. That is reassuring, but staying aware is still important.
-
-Top things the system checked:
-- {top_factors[0]}
-- {top_factors[1]}
-- {top_factors[2]}
-
-Keep doing:
-- Share these results with your doctor during your next visit.
-- Keep regular yearly check-ups and any imaging your doctor recommends.
-- Maintain healthy habits: balanced meals, regular activity, avoid smoking, and limit alcohol.
-
-Call your doctor sooner if you notice: new stomach or back pain, yellow skin or eyes, or sudden weight loss.
-
-Remember: This tool supports your healthcare team. Follow the plan you set together with your doctor."""
-
-        return commentary
-
-    def guideline_snapshot(self) -> Dict[str, Any]:
-        """Provide structured guideline data for downstream consumers."""
-        return {
-            'sources': self.guideline_sources,
-            'lab_thresholds': self.lab_thresholds,
-            'imaging_pathways': self.imaging_pathways,
-            'high_risk_criteria': self.high_risk_criteria,
-            'follow_up_windows': self.follow_up_windows,
-        }
-
-    def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
-        """Create a PDF report summarizing the diagnostic analysis."""
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.add_page()
-        content_width = pdf.w - pdf.l_margin - pdf.r_margin
-
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "DiagnoAI Pancreas - Diagnostic Report", ln=True)
-        pdf.set_font("Helvetica", "", 12)
-        pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-        pdf.ln(4)
-
-        prediction_flag = analysis.get('prediction', 0)
-        risk_level = analysis.get('risk_level', 'N/A')
-        try:
-            probability_pct = float(analysis.get('probability', 0)) * 100
-        except (TypeError, ValueError):
-            probability_pct = 0.0
-
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Summary", ln=True)
-        pdf.set_font("Helvetica", "", 12)
-        prediction_text = "High Risk - Further Evaluation Recommended" if prediction_flag else "Low Risk Assessment"
-        pdf.cell(0, 6, f"Prediction: {prediction_text}", ln=True)
-        pdf.cell(0, 6, f"Risk Level: {risk_level}", ln=True)
-        pdf.cell(0, 6, f"Risk Probability: {probability_pct:.1f}%", ln=True)
-        pdf.ln(4)
-
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Patient Laboratory Values", ln=True)
-        pdf.set_font("Helvetica", "", 11)
-        feature_keys = [
-            'wbc', 'rbc', 'plt', 'hgb', 'hct', 'mpv', 'pdw',
-            'mono', 'baso_abs', 'baso_pct', 'glucose', 'act', 'bilirubin'
-        ]
-        for key, label in zip(feature_keys, FEATURE_NAMES):
-            raw_value = patient_inputs.get(key)
-            try:
-                formatted_value = f"{float(raw_value):.2f}"
-            except (TypeError, ValueError):
-                formatted_value = 'N/A' if raw_value is None else str(raw_value)
-            pdf.cell(0, 6, f"{label}: {formatted_value}", ln=True)
-        pdf.ln(4)
-
-        shap_values = analysis.get('shap_values') or analysis.get('shapValues') or []
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, "Top Contributing Factors", ln=True)
-        pdf.set_font("Helvetica", "", 11)
-        if shap_values:
-            for item in shap_values[:5]:
-                feature = item.get('feature', 'Unknown')
-                impact = item.get('impact', 'neutral')
-                value = item.get('value', 0)
-                try:
-                    value_str = f"{float(value):+.3f}"
-                except (TypeError, ValueError):
-                    value_str = str(value)
-                pdf.multi_cell(content_width, 6, f"{feature} ({impact} impact): {value_str}")
-        else:
-            pdf.multi_cell(content_width, 6, "SHAP analysis unavailable.")
-        pdf.ln(4)
-
-        commentary = analysis.get('ai_explanation') or analysis.get('aiExplanation') or ''
-        if commentary:
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.cell(0, 8, "AI Clinical Commentary", ln=True)
-            pdf.set_font("Helvetica", "", 11)
-            pdf.multi_cell(content_width, 6, commentary)
-            pdf.ln(4)
-
-        guideline_links = [
-            ("NCCN v2.2024", "https://www.nccn.org/professionals/physician_gls/pdf/pancreatic.pdf"),
-            ("ASCO 2023", "https://ascopubs.org/doi/full/10.1200/JCO.23.00000"),
-            ("ESMO 2023", "https://www.esmo.org/guidelines/gastrointestinal-cancers/pancreatic-cancer"),
-            ("CAPS 2020", "https://gut.bmj.com/content/69/1/7"),
-            ("AGA 2020", "https://www.gastrojournal.org/article/S0016-5085(20)30094-6/fulltext"),
-        ]
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.set_text_color(30, 41, 59)
-        pdf.cell(0, 8, "Guideline References", ln=True)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(37, 99, 235)
-        for label, url in guideline_links:
-            pdf.cell(0, 6, label, ln=True, link=url)
-        pdf.set_text_color(30, 41, 59)
-        pdf.ln(2)
-
-        pdf.set_font("Helvetica", "I", 9)
-        pdf.multi_cell(content_width, 5, "This report is generated by the DiagnoAI Pancreas screening platform. Clinical correlation is required before making medical decisions.")
-
-        pdf_bytes = bytes(pdf.output(dest='S'))
-        buffer = BytesIO(pdf_bytes)
-        buffer.seek(0)
-        return buffer
-
-# Initialize diagnostic system
-diagnostic_system = MedicalDiagnosticSystem()
-
-def parse_patient_inputs(payload: Dict[str, Any]) -> tuple[list[float], Dict[str, float]]:
-    """Convert incoming payload into feature list and normalized map."""
-    features: list[float] = []
-    normalized: Dict[str, float] = {}
-    for key, default in FEATURE_DEFAULTS:
-        raw_value = payload.get(key, default)
-        try:
-            value = float(raw_value)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(str(exc)) from exc
-        features.append(value)
-        normalized[key] = value
-    return features, normalized
-
-
-
-def run_diagnostic_pipeline(payload: Dict[str, Any]) -> tuple[Dict[str, Any] | None, Dict[str, Any] | None, int]:
-    """Execute the full diagnostic flow returning analysis data or an error payload."""
-    try:
-        features, normalized = parse_patient_inputs(payload)
-    except (TypeError, ValueError) as exc:
-        return None, {
-            'error': 'Invalid numeric values in request data',
-            'details': str(exc),
-            'status': 'validation_error'
-        }, 400
-
-    is_valid, errors = diagnostic_system.validate_medical_data(normalized)
-    if not is_valid:
-        return None, {
-            'error': 'Medical data validation failed',
-            'validation_errors': errors,
-            'status': 'validation_error'
-        }, 400
-
-    prediction, probability = diagnostic_system.predict_cancer_risk(features)
-    shap_values = diagnostic_system.calculate_shap_analysis(features, prediction)
-    language = str(payload.get('language', 'en')).lower()
-    client_type = str(payload.get('client_type', 'patient') or 'patient').lower()
-    ai_explanation = diagnostic_system.generate_clinical_commentary(
-        prediction, probability, shap_values, features, language=language, client_type=client_type
-    )
-
-    analysis = {
-        'prediction': int(prediction),
-        'probability': float(probability),
-        'risk_level': 'High' if probability > 0.7 else 'Moderate' if probability > 0.3 else 'Low',
-        'shap_values': shap_values,
-        'metrics': {k: v for k, v in diagnostic_system.model_metrics.items()},
-        'ai_explanation': ai_explanation,
-        'patient_values': normalized,
-        'language': language,
-        'client_type': client_type,
-    }
-    return analysis, None, 200
-
-
-@app.route('/api/predict', methods=['POST'])
-def predict():
-    """Professional pancreatic cancer prediction endpoint."""
-    start_time = datetime.now()
-
-    try:
-        if not request.json:
-            return jsonify({
-                'error': 'No JSON data provided',
-                'status': 'validation_error'
-            }), 400
-
-        data = request.json
-        logger.info('Processing prediction request for patient data')
-
-        analysis, error_payload, status_code = run_diagnostic_pipeline(data)
-        if status_code != 200:
-            return jsonify(error_payload), status_code
-
-        processing_time = (datetime.now() - start_time).total_seconds()
-        response = {
-            **analysis,
-            'processing_time': f"{processing_time:.3f}s",
-            'timestamp': datetime.now().isoformat(),
-            'status': 'success'
-        }
-
-        logger.info(f"Prediction completed: Risk Level {response['risk_level']}")
-        return jsonify(response)
-
-    except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-
-        return jsonify({
-            'error': 'Internal server error during prediction',
-            'details': str(e) if app.debug else 'An unexpected error occurred',
-            'status': 'error',
-            'timestamp': datetime.now().isoformat()
-        }), 500
-
-
-@app.route('/api/report', methods=['POST'])
-def download_report():
-    """Generate a PDF report that summarizes the diagnostic results."""
-    try:
-        if not request.json:
-            return jsonify({
-                'error': 'No JSON data provided',
-                'status': 'validation_error'
-            }), 400
-
-        payload = request.json if isinstance(request.json, dict) else {}
-        patient_payload = payload.get('patient') if isinstance(payload.get('patient'), dict) else None
-        result_payload = payload.get('result') if isinstance(payload.get('result'), dict) else None
-
-        if patient_payload is None:
-            patient_payload = payload
-
-        client_type_hint = str(
-            (payload.get('client_type') if isinstance(payload.get('client_type'), str) else None)
-            or (patient_payload.get('client_type') if isinstance(patient_payload, dict) else None)
-            or 'patient'
-        ).lower()
-
-        if isinstance(patient_payload, dict) and 'client_type' not in patient_payload:
-            patient_payload = {**patient_payload, 'client_type': client_type_hint}
-
-        if not isinstance(patient_payload, dict):
-            return jsonify({
-                'error': 'Patient data is required for report generation',
-                'status': 'validation_error'
-            }), 400
-
-        try:
-            _, normalized_patient = parse_patient_inputs(patient_payload)
-        except (TypeError, ValueError) as exc:
-            return jsonify({
-                'error': 'Invalid numeric values in patient data',
-                'details': str(exc),
-                'status': 'validation_error'
-            }), 400
-
-        if result_payload is None:
-            analysis_data, error_payload, status_code = run_diagnostic_pipeline(patient_payload)
-            if status_code != 200:
-                return jsonify(error_payload), status_code
-        else:
-            analysis_data = {
-                **result_payload,
-                'shap_values': result_payload.get('shap_values') or result_payload.get('shapValues') or []
-            }
-            if 'client_type' not in analysis_data:
-                analysis_data['client_type'] = client_type_hint
-            if 'ai_explanation' not in analysis_data and 'aiExplanation' in result_payload:
-                analysis_data['ai_explanation'] = result_payload['aiExplanation']
-            if 'risk_level' not in analysis_data:
-                try:
-                    probability_value = float(analysis_data.get('probability', 0))
-                except (TypeError, ValueError):
-                    probability_value = 0.0
-                analysis_data['risk_level'] = 'High' if probability_value > 0.7 else 'Moderate' if probability_value > 0.3 else 'Low'
-            analysis_data['patient_values'] = analysis_data.get('patient_values') or normalized_patient
-
-        patient_values = analysis_data.get('patient_values') or normalized_patient
-        pdf_buffer = diagnostic_system.generate_pdf_report(patient_values, analysis_data)
-        filename = f"diagnostic-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
-        logger.info('PDF diagnostic report generated')
-        return send_file(
-            pdf_buffer,
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=filename
-        )
-
-    except Exception as e:
-        logger.error(f"PDF generation error: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({
-            'error': 'Internal server error during PDF generation',
-            'details': str(e) if app.debug else 'An unexpected error occurred',
-            'status': 'error',
-            'timestamp': datetime.now().isoformat()
-        }), 500
-
-
-@app.route('/api/health', methods=['GET'])
-def health():
-    """Health check endpoint for monitoring."""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'version': '2.1.0',
-        'service': 'DiagnoAI Pancreas API',
-        'model_loaded': diagnostic_system.model is not None,
-        'ai_client_available': groq_client is not None
-    })
-
-@app.route('/api/status', methods=['GET'])
-def status():
-    """System status endpoint."""
-    return jsonify({
-        'status': 'operational',
-        'timestamp': datetime.now().isoformat(),
-        'version': '2.1.0',
-        'model_status': 'loaded' if diagnostic_system.model else 'mock_mode',
-        'features': {
-            'prediction': True,
-            'shap_analysis': True,
-            'ai_commentary': groq_client is not None,
-            'validation': True
-        },
-        'model_metrics': diagnostic_system.model_metrics,
-        'uptime': 'N/A',  # Could implement uptime tracking
-        'memory_usage': 'N/A'  # Could implement memory monitoring
-    })
-
-@app.route('/api/model-info', methods=['GET'])
-def model_info():
-    """Model information endpoint."""
-    return jsonify({
-        'model_name': 'Random Forest Classifier',
-        'version': '2.1.0',
-        'algorithm': 'RandomForestClassifier',
-        'features': FEATURE_NAMES,
-        'performance_metrics': {
-            'accuracy': f"{diagnostic_system.model_metrics['accuracy']:.1%}",
-            'precision': f"{diagnostic_system.model_metrics['precision']:.1%}",
-            'recall': f"{diagnostic_system.model_metrics['recall']:.1%}",
-            'f1_score': f"{diagnostic_system.model_metrics['f1_score']:.1%}",
-            'roc_auc': f"{diagnostic_system.model_metrics['roc_auc']:.3f}"
-        },
-        'training_data': '10,000+ patient records',
-        'last_updated': '2024-01-15',
-        'medical_validation': 'FDA Approved',
-        'compliance': 'HIPAA Compliant',
-        'reference_ranges': MEDICAL_RANGES,
-        'guidelines': diagnostic_system.guideline_snapshot()
-    })
-
-@app.errorhandler(404)
-def not_found(error):
-    """404 error handler."""
-    return jsonify({
-        'error': 'Endpoint not found',
-        'path': request.path,
-        'method': request.method,
-        'status': 'not_found',
-        'timestamp': datetime.now().isoformat()
-    }), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """500 error handler."""
-    logger.error(f"Internal server error: {str(error)}")
-    return jsonify({
-        'error': 'Internal server error',
-        'details': str(error) if app.debug else 'An unexpected error occurred',
-        'status': 'error',
-        'timestamp': datetime.now().isoformat()
-    }), 500
-
-if __name__ == '__main__':
-    logger.info("Starting DiagnoAI Pancreas API Server...")
-    logger.info(f"Model loaded: {diagnostic_system.model is not None}")
-    logger.info(f"AI client available: {groq_client is not None}")
-
-    app.run(
-        debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true',
-        host='0.0.0.0',
-        port=int(os.getenv('PORT', 5000))
-    )
+
+            response = groq_client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=600
+            )
+
+            return response.choices[0].message.content
+
+
+        except Exception as e:
+
+            logger.error(f"AI commentary generation error: {e}")
+
+            return self._generate_fallback_commentary(
+
+                prediction, probability, shap_values, language=language, client_type=audience
+
+            )
+
+
+
+    def _generate_fallback_commentary(self, prediction: int, probability: float,
+                                      shap_values: List[Dict], language: str = 'en',
+                                      client_type: str = 'patient') -> str:
+        """Generate dynamic clinical commentary based on actual values."""
+        language = (language or 'en').lower()
+        audience = (client_type or 'patient').lower()
+        is_professional = audience in {'doctor', 'clinician', 'provider', 'specialist', 'researcher', 'medical', 'hospital', 'physician'}
+
+        risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
+        locale_code = 'ru' if language.startswith('ru') else 'en'
+        locale_bundle = COMMENTARY_LOCALE.get(locale_code, COMMENTARY_LOCALE['en'])
+        audience_bundle = locale_bundle['professional'] if is_professional else locale_bundle['patient']
+        feature_labels = FEATURE_LABELS.get(locale_code, FEATURE_LABELS['en'])
+
+        probability_pct = f"{probability:.1%}"
+        risk_label = locale_bundle['risk_labels'].get(risk_level, risk_level.upper())
+        probability_label = audience_bundle.get('probability_label', locale_bundle['probability_label'])
+
+        top_factor_lines: list[str] = []
+        for sv in shap_values[:3]:
+            feature_key = str(sv.get('feature', 'Unknown')).upper()
+            feature_label = feature_labels.get(feature_key, feature_key.replace('_', ' ').title())
+            impact_key = str(sv.get('impact', 'neutral')).lower()
+            if impact_key not in audience_bundle['impact_terms']:
+                impact_key = 'neutral'
+            impact_phrase = audience_bundle['impact_terms'][impact_key]
+            value = sv.get('value')
+            try:
+                value_str = f"{float(value):+.3f}"
+            except (TypeError, ValueError):
+                value_str = str(value) if value is not None else 'N/A'
+            top_factor_lines.append(f"- {feature_label}: {impact_phrase} ({value_str})")
+
+        while len(top_factor_lines) < 3:
+            top_factor_lines.append(f"- {audience_bundle['default_driver']}")
+
+        base_lines: list[str] = [
+            audience_bundle['header_template'].format(risk=risk_label),
+            f"{probability_label}: {probability_pct}",
+            ''
+        ]
+
+        if is_professional:
+            synopsis_map = audience_bundle['synopsis']
+            actions_map = audience_bundle['actions']
+            coordination_map = audience_bundle['coordination']
+            monitoring_map = audience_bundle['monitoring']
+
+            lines = base_lines + [audience_bundle['drivers_title']]
+            lines.extend(top_factor_lines)
+            lines.append('')
+            lines.append(audience_bundle['synopsis_title'])
+            lines.append(synopsis_map.get(risk_level, synopsis_map.get('Low', '')))
+            lines.append('')
+            lines.append(audience_bundle['actions_title'])
+            lines.extend(f"- {item}" for item in actions_map.get(risk_level, actions_map.get('Low', [])))
+            lines.append('')
+            lines.append(audience_bundle['coordination_title'])
+            lines.extend(f"- {item}" for item in coordination_map.get(risk_level, coordination_map.get('Low', [])))
+            lines.append('')
+            lines.append(audience_bundle['monitoring_title'])
+            lines.extend(f"- {item}" for item in monitoring_map.get(risk_level, monitoring_map.get('Low', [])))
+            lines.append('')
+            lines.append(audience_bundle['reminder_title'])
+            lines.append(audience_bundle['reminder_text'])
+        else:
+            core_map = audience_bundle['core_message']
+            next_steps_map = audience_bundle['next_steps']
+            warning_items = audience_bundle.get('warning_signs', [])
+            support_items = audience_bundle.get('support', [])
+
+            core_text = core_map.get(risk_level, core_map.get('Low', '')).format(probability=probability_pct)
+
+            lines = base_lines + [
+                audience_bundle['core_title'],
+                core_text,
+                '',
+                audience_bundle['drivers_title'],
+            ]
+            lines.extend(top_factor_lines)
+            lines.append('')
+            lines.append(audience_bundle['next_steps_title'])
+            lines.extend(f"- {item}" for item in next_steps_map.get(risk_level, next_steps_map.get('Low', [])))
+            lines.append('')
+            lines.append(audience_bundle['warnings_title'])
+            lines.extend(f"- {item}" for item in warning_items)
+            lines.append('')
+            lines.append(audience_bundle['support_title'])
+            lines.extend(f"- {item}" for item in support_items)
+            lines.append('')
+            lines.append(audience_bundle['reminder_title'])
+            lines.append(audience_bundle['reminder_text'])
+
+        return "\n".join(lines)
+
+
+
+
+    def guideline_snapshot(self) -> Dict[str, Any]:
+
+        """Provide structured guideline data for downstream consumers."""
+
+        return {
+
+            'sources': self.guideline_sources,
+
+            'lab_thresholds': self.lab_thresholds,
+
+            'imaging_pathways': self.imaging_pathways,
+
+            'high_risk_criteria': self.high_risk_criteria,
+
+            'follow_up_windows': self.follow_up_windows,
+
+        }
+
+
+
+
+    def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
+        """Create a polished PDF report summarizing the diagnostic analysis."""
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=18)
+        pdf.add_page()
+
+        content_width = pdf.w - pdf.l_margin - pdf.r_margin
+        language = (analysis.get('language') or 'en').upper()
+        client_type = str(analysis.get('client_type') or 'patient').title()
+
+        header_height = 24
+        x0 = pdf.l_margin
+        y0 = pdf.get_y()
+        pdf.set_fill_color(23, 94, 201)
+        pdf.set_draw_color(23, 94, 201)
+        pdf.rect(x0, y0, content_width, header_height, 'F')
+
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_xy(x0 + 6, y0 + 6)
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 8, "DiagnoAI Clinical Intelligence Report", ln=True)
+        pdf.set_x(x0 + 6)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(0, 6, f"Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+
+        pdf.set_y(y0 + header_height + 6)
+        pdf.set_text_color(30, 41, 59)
+
+        prediction_flag = analysis.get('prediction', 0)
+        risk_level = (analysis.get('risk_level') or 'N/A')
+        try:
+            probability_pct = float(analysis.get('probability', 0)) * 100
+        except (TypeError, ValueError):
+            probability_pct = 0.0
+
+        prediction_text = "High Risk - Further Evaluation Recommended" if prediction_flag else "Low Risk Assessment"
+        risk_palette = {
+            'High': (220, 38, 38),
+            'Moderate': (217, 119, 6),
+            'Low': (22, 163, 74)
+        }
+        risk_color = risk_palette.get(risk_level, (37, 99, 235))
+
+        cards = [
+            ("Risk Level", risk_level.upper(), risk_color),
+            ("Probability", f"{probability_pct:.1f}%", (37, 99, 235)),
+            ("Audience", f"{client_type} | {language}", (30, 41, 59))
+        ]
+
+        card_gap = 4
+        card_width = (content_width - (card_gap * (len(cards) - 1))) / len(cards)
+        card_height = 22
+        card_y = pdf.get_y()
+        for idx, (label, value, accent) in enumerate(cards):
+            card_x = pdf.l_margin + idx * (card_width + card_gap)
+            pdf.set_xy(card_x, card_y)
+            pdf.set_fill_color(248, 250, 255)
+            pdf.set_draw_color(226, 232, 240)
+            pdf.rect(card_x, card_y, card_width, card_height, 'DF')
+
+            pdf.set_xy(card_x + 4, card_y + 4)
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(100, 116, 139)
+            pdf.cell(card_width - 8, 4, label.upper())
+            pdf.set_xy(card_x + 4, card_y + 10)
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_text_color(*accent)
+            pdf.multi_cell(card_width - 8, 6, value)
+
+        pdf.set_y(card_y + card_height + 8)
+        pdf.set_text_color(30, 41, 59)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(content_width, 6, f"Prediction: {prediction_text}. This assessment combines laboratory analytics, SHAP explainability, and AI commentary to support clinical decision-making.")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 9, "Laboratory Snapshot", ln=True)
+        pdf.set_font("Helvetica", "", 10.5)
+
+        feature_keys = ['wbc', 'rbc', 'plt', 'hgb', 'hct', 'mpv', 'pdw', 'mono', 'baso_abs', 'baso_pct', 'glucose', 'act', 'bilirubin']
+        lab_rows: list[tuple[str, str]] = []
+        for key, label in zip(feature_keys, FEATURE_NAMES):
+            raw_value = patient_inputs.get(key)
+            try:
+                formatted_value = f"{float(raw_value):.2f}"
+            except (TypeError, ValueError):
+                formatted_value = 'N/A' if raw_value is None else str(raw_value)
+            lab_rows.append((label, formatted_value))
+
+        row_fill = False
+        row_height = 8
+        for idx in range(0, len(lab_rows), 2):
+            cells = lab_rows[idx:idx + 2]
+            fill_color = (248, 250, 252) if row_fill else (255, 255, 255)
+            pdf.set_fill_color(*fill_color)
+            for col_idx in range(2):
+                cell_width = content_width / 2
+                if col_idx < len(cells):
+                    label, value = cells[col_idx]
+                    text = f"{label}: {value}"
+                else:
+                    text = ""
+                pdf.cell(cell_width, row_height, text, border=0, ln=0 if col_idx == 0 else 1, fill=True)
+            row_fill = not row_fill
+        pdf.ln(2)
+
+        shap_values = analysis.get('shap_values') or analysis.get('shapValues') or []
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(0, 9, "Key SHAP Drivers", ln=True)
+        pdf.set_font("Helvetica", "", 11)
+        if shap_values:
+            for idx, item in enumerate(shap_values[:5], start=1):
+                feature = str(item.get('feature', 'Unknown'))
+                label = FEATURE_LABELS['en'].get(feature.upper(), feature)
+                impact = str(item.get('impact', 'neutral')).lower()
+                value = item.get('value', 0)
+                try:
+                    value_str = f"{float(value):+.3f}"
+                except (TypeError, ValueError):
+                    value_str = str(value)
+                pdf.multi_cell(content_width, 6, f"{idx}. {label} ({impact}): {value_str}")
+        else:
+            pdf.multi_cell(content_width, 6, "SHAP analysis unavailable.")
+        pdf.ln(2)
+
+        commentary = analysis.get('ai_explanation') or analysis.get('aiExplanation') or ''
+        if commentary:
+            pdf.set_font("Helvetica", "B", 13)
+            pdf.cell(0, 9, "AI Clinical Commentary", ln=True)
+            pdf.set_font("Helvetica", "", 10.5)
+            pdf.set_fill_color(250, 253, 255)
+            pdf.set_text_color(45, 55, 72)
+            for paragraph in [segment.strip() for segment in commentary.split('\n') if segment.strip()]:
+                pdf.multi_cell(content_width, 6, paragraph, border=0, fill=True)
+                pdf.ln(1)
+            pdf.set_text_color(30, 41, 59)
+            pdf.ln(2)
+
+        guideline_links = [
+            ("NCCN v2.2024", "https://www.nccn.org/professionals/physician_gls/pdf/pancreatic.pdf"),
+            ("ASCO 2023", "https://ascopubs.org/doi/full/10.1200/JCO.23.00000"),
+            ("ESMO 2023", "https://www.esmo.org/guidelines/gastrointestinal-cancers/pancreatic-cancer"),
+            ("CAPS 2020", "https://gut.bmj.com/content/69/1/7"),
+            ("AGA 2020", "https://www.gastrojournal.org/article/S0016-5085(20)30094-6/fulltext")
+        ]
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, "Guideline References", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(37, 99, 235)
+        bullet = '-'
+        for label, url in guideline_links:
+            pdf.cell(6, 6, bullet, ln=0)
+            pdf.cell(0, 6, label, ln=1, link=url)
+        pdf.set_text_color(30, 41, 59)
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(100, 116, 139)
+        pdf.multi_cell(content_width, 5, "DiagnoAI Pancreas provides AI-assisted screening support. Interpret alongside full clinical context and governing medical guidelines.")
+
+        pdf_bytes = bytes(pdf.output(dest='S'))
+        buffer = BytesIO(pdf_bytes)
+        buffer.seek(0)
+        return buffer
+
+
+# Initialize diagnostic system
+
+diagnostic_system = MedicalDiagnosticSystem()
+
+
+
+def parse_patient_inputs(payload: Dict[str, Any]) -> tuple[list[float], Dict[str, float]]:
+
+    """Convert incoming payload into feature list and normalized map."""
+
+    features: list[float] = []
+
+    normalized: Dict[str, float] = {}
+
+    for key, default in FEATURE_DEFAULTS:
+
+        raw_value = payload.get(key, default)
+
+        try:
+
+            value = float(raw_value)
+
+        except (TypeError, ValueError) as exc:
+
+            raise ValueError(str(exc)) from exc
+
+        features.append(value)
+
+        normalized[key] = value
+
+    return features, normalized
+
+
+
+
+
+
+
+def run_diagnostic_pipeline(payload: Dict[str, Any]) -> tuple[Dict[str, Any] | None, Dict[str, Any] | None, int]:
+
+    """Execute the full diagnostic flow returning analysis data or an error payload."""
+
+    try:
+
+        features, normalized = parse_patient_inputs(payload)
+
+    except (TypeError, ValueError) as exc:
+
+        return None, {
+
+            'error': 'Invalid numeric values in request data',
+
+            'details': str(exc),
+
+            'status': 'validation_error'
+
+        }, 400
+
+
+
+    is_valid, errors = diagnostic_system.validate_medical_data(normalized)
+
+    if not is_valid:
+
+        return None, {
+
+            'error': 'Medical data validation failed',
+
+            'validation_errors': errors,
+
+            'status': 'validation_error'
+
+        }, 400
+
+
+
+    prediction, probability = diagnostic_system.predict_cancer_risk(features)
+
+    shap_values = diagnostic_system.calculate_shap_analysis(features, prediction)
+
+    language = str(payload.get('language', 'en')).lower()
+
+    client_type = str(payload.get('client_type', 'patient') or 'patient').lower()
+
+    ai_explanation = diagnostic_system.generate_clinical_commentary(
+
+        prediction, probability, shap_values, features, language=language, client_type=client_type
+
+    )
+
+
+
+    analysis = {
+
+        'prediction': int(prediction),
+
+        'probability': float(probability),
+
+        'risk_level': 'High' if probability > 0.7 else 'Moderate' if probability > 0.3 else 'Low',
+
+        'shap_values': shap_values,
+
+        'metrics': {k: v for k, v in diagnostic_system.model_metrics.items()},
+
+        'ai_explanation': ai_explanation,
+
+        'patient_values': normalized,
+
+        'language': language,
+
+        'client_type': client_type,
+
+    }
+
+    return analysis, None, 200
+
+
+
+
+
+@app.route('/api/predict', methods=['POST'])
+
+def predict():
+
+    """Professional pancreatic cancer prediction endpoint."""
+
+    start_time = datetime.now()
+
+
+
+    try:
+
+        if not request.json:
+
+            return jsonify({
+
+                'error': 'No JSON data provided',
+
+                'status': 'validation_error'
+
+            }), 400
+
+
+
+        data = request.json
+
+        logger.info('Processing prediction request for patient data')
+
+
+
+        analysis, error_payload, status_code = run_diagnostic_pipeline(data)
+
+        if status_code != 200:
+
+            return jsonify(error_payload), status_code
+
+
+
+        processing_time = (datetime.now() - start_time).total_seconds()
+
+        response = {
+
+            **analysis,
+
+            'processing_time': f"{processing_time:.3f}s",
+
+            'timestamp': datetime.now().isoformat(),
+
+            'status': 'success'
+
+        }
+
+
+
+        logger.info(f"Prediction completed: Risk Level {response['risk_level']}")
+
+        return jsonify(response)
+
+
+
+    except Exception as e:
+
+        logger.error(f"Prediction error: {str(e)}")
+
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+
+        return jsonify({
+
+            'error': 'Internal server error during prediction',
+
+            'details': str(e) if app.debug else 'An unexpected error occurred',
+
+            'status': 'error',
+
+            'timestamp': datetime.now().isoformat()
+
+        }), 500
+
+
+
+
+
+
+
+
+@app.route('/api/commentary', methods=['POST'])
+def regenerate_commentary():
+    """Regenerate AI commentary in a requested language using existing analysis context."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({
+            'error': 'Invalid payload',
+            'status': 'validation_error'
+        }), 400
+
+    analysis_payload = payload.get('analysis') if isinstance(payload.get('analysis'), dict) else {}
+    merged: Dict[str, Any] = {}
+    if isinstance(analysis_payload, dict):
+        merged.update(analysis_payload)
+    merged.update({k: v for k, v in payload.items() if k != 'analysis'})
+
+    shap_values = merged.get('shap_values') or merged.get('shapValues') or []
+    if not isinstance(shap_values, list):
+        shap_values = []
+
+    patient_values = merged.get('patient_values') or merged.get('patientValues')
+    if patient_values is None and isinstance(merged.get('patient'), dict):
+        patient_values = merged.get('patient')
+
+    feature_vector = merged.get('features') or merged.get('feature_vector')
+
+    if patient_values is None and not isinstance(feature_vector, list):
+        return jsonify({
+            'error': 'Patient values are required to regenerate commentary',
+            'status': 'validation_error'
+        }), 400
+
+    if isinstance(feature_vector, list) and feature_vector:
+        try:
+            features = [float(value) for value in feature_vector]
+        except (TypeError, ValueError):
+            features = rebuild_feature_vector(patient_values if isinstance(patient_values, dict) else None)
+    else:
+        features = rebuild_feature_vector(patient_values if isinstance(patient_values, dict) else None)
+
+    try:
+        probability = float(merged.get('probability', 0.0))
+    except (TypeError, ValueError):
+        probability = 0.0
+
+    prediction_raw = merged.get('prediction')
+    if prediction_raw is None:
+        prediction = 1 if probability > 0.5 else 0
+    else:
+        try:
+            prediction = int(prediction_raw)
+        except (TypeError, ValueError):
+            prediction = 1 if probability > 0.5 else 0
+
+    language = str(merged.get('language') or payload.get('language') or 'en').lower()
+    client_type = str(
+        merged.get('client_type')
+        or merged.get('clientType')
+        or payload.get('client_type')
+        or 'patient'
+    ).lower()
+
+    try:
+        commentary = diagnostic_system.generate_clinical_commentary(
+            prediction,
+            probability,
+            shap_values,
+            features,
+            language=language,
+            client_type=client_type
+        )
+        risk_level = 'High' if probability > 0.7 else 'Moderate' if probability > 0.3 else 'Low'
+        return jsonify({
+            'ai_explanation': commentary,
+            'language': language,
+            'risk_level': risk_level,
+            'prediction': int(prediction),
+            'probability': float(probability)
+        })
+    except Exception as exc:
+        logger.error(f"Commentary regeneration error: {exc}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': 'Failed to regenerate commentary',
+            'details': str(exc) if app.debug else 'Unexpected error',
+            'status': 'error'
+        }), 500
+
+
+@app.route('/api/report', methods=['POST'])
+
+def download_report():
+
+    """Generate a PDF report that summarizes the diagnostic results."""
+
+    try:
+
+        if not request.json:
+
+            return jsonify({
+
+                'error': 'No JSON data provided',
+
+                'status': 'validation_error'
+
+            }), 400
+
+
+
+        payload = request.json if isinstance(request.json, dict) else {}
+
+        patient_payload = payload.get('patient') if isinstance(payload.get('patient'), dict) else None
+
+        result_payload = payload.get('result') if isinstance(payload.get('result'), dict) else None
+
+
+
+        if patient_payload is None:
+
+            patient_payload = payload
+
+
+
+        client_type_hint = str(
+
+            (payload.get('client_type') if isinstance(payload.get('client_type'), str) else None)
+
+            or (patient_payload.get('client_type') if isinstance(patient_payload, dict) else None)
+
+            or 'patient'
+
+        ).lower()
+
+
+
+        if isinstance(patient_payload, dict) and 'client_type' not in patient_payload:
+
+            patient_payload = {**patient_payload, 'client_type': client_type_hint}
+
+
+
+        if not isinstance(patient_payload, dict):
+
+            return jsonify({
+
+                'error': 'Patient data is required for report generation',
+
+                'status': 'validation_error'
+
+            }), 400
+
+
+
+        try:
+
+            _, normalized_patient = parse_patient_inputs(patient_payload)
+
+        except (TypeError, ValueError) as exc:
+
+            return jsonify({
+
+                'error': 'Invalid numeric values in patient data',
+
+                'details': str(exc),
+
+                'status': 'validation_error'
+
+            }), 400
+
+
+
+        if result_payload is None:
+
+            analysis_data, error_payload, status_code = run_diagnostic_pipeline(patient_payload)
+
+            if status_code != 200:
+
+                return jsonify(error_payload), status_code
+
+        else:
+
+            analysis_data = {
+
+                **result_payload,
+
+                'shap_values': result_payload.get('shap_values') or result_payload.get('shapValues') or []
+
+            }
+
+            if 'client_type' not in analysis_data:
+
+                analysis_data['client_type'] = client_type_hint
+
+            if 'ai_explanation' not in analysis_data and 'aiExplanation' in result_payload:
+
+                analysis_data['ai_explanation'] = result_payload['aiExplanation']
+
+            if 'risk_level' not in analysis_data:
+
+                try:
+
+                    probability_value = float(analysis_data.get('probability', 0))
+
+                except (TypeError, ValueError):
+
+                    probability_value = 0.0
+
+                analysis_data['risk_level'] = 'High' if probability_value > 0.7 else 'Moderate' if probability_value > 0.3 else 'Low'
+
+            analysis_data['patient_values'] = analysis_data.get('patient_values') or normalized_patient
+
+
+
+        patient_values = analysis_data.get('patient_values') or normalized_patient
+
+        pdf_buffer = diagnostic_system.generate_pdf_report(patient_values, analysis_data)
+
+        filename = f"diagnostic-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
+
+        logger.info('PDF diagnostic report generated')
+
+        return send_file(
+
+            pdf_buffer,
+
+            mimetype='application/pdf',
+
+            as_attachment=True,
+
+            download_name=filename
+
+        )
+
+
+
+    except Exception as e:
+
+        logger.error(f"PDF generation error: {str(e)}")
+
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+        return jsonify({
+
+            'error': 'Internal server error during PDF generation',
+
+            'details': str(e) if app.debug else 'An unexpected error occurred',
+
+            'status': 'error',
+
+            'timestamp': datetime.now().isoformat()
+
+        }), 500
+
+
+
+
+
+@app.route('/api/health', methods=['GET'])
+
+def health():
+
+    """Health check endpoint for monitoring."""
+
+    return jsonify({
+
+        'status': 'healthy',
+
+        'timestamp': datetime.now().isoformat(),
+
+        'version': '2.1.0',
+
+        'service': 'DiagnoAI Pancreas API',
+
+        'model_loaded': diagnostic_system.model is not None,
+
+        'ai_client_available': groq_client is not None
+
+    })
+
+
+
+@app.route('/api/status', methods=['GET'])
+
+def status():
+
+    """System status endpoint."""
+
+    return jsonify({
+
+        'status': 'operational',
+
+        'timestamp': datetime.now().isoformat(),
+
+        'version': '2.1.0',
+
+        'model_status': 'loaded' if diagnostic_system.model else 'mock_mode',
+
+        'features': {
+
+            'prediction': True,
+
+            'shap_analysis': True,
+
+            'ai_commentary': groq_client is not None,
+
+            'validation': True
+
+        },
+
+        'model_metrics': diagnostic_system.model_metrics,
+
+        'uptime': 'N/A',  # Could implement uptime tracking
+
+        'memory_usage': 'N/A'  # Could implement memory monitoring
+
+    })
+
+
+
+@app.route('/api/model-info', methods=['GET'])
+
+def model_info():
+
+    """Model information endpoint."""
+
+    return jsonify({
+
+        'model_name': 'Random Forest Classifier',
+
+        'version': '2.1.0',
+
+        'algorithm': 'RandomForestClassifier',
+
+        'features': FEATURE_NAMES,
+
+        'performance_metrics': {
+
+            'accuracy': f"{diagnostic_system.model_metrics['accuracy']:.1%}",
+
+            'precision': f"{diagnostic_system.model_metrics['precision']:.1%}",
+
+            'recall': f"{diagnostic_system.model_metrics['recall']:.1%}",
+
+            'f1_score': f"{diagnostic_system.model_metrics['f1_score']:.1%}",
+
+            'roc_auc': f"{diagnostic_system.model_metrics['roc_auc']:.3f}"
+
+        },
+
+        'training_data': '10,000+ patient records',
+
+        'last_updated': '2024-01-15',
+
+        'medical_validation': 'FDA Approved',
+
+        'compliance': 'HIPAA Compliant',
+
+        'reference_ranges': MEDICAL_RANGES,
+
+        'guidelines': diagnostic_system.guideline_snapshot()
+
+    })
+
+
+
+@app.errorhandler(404)
+
+def not_found(error):
+
+    """404 error handler."""
+
+    return jsonify({
+
+        'error': 'Endpoint not found',
+
+        'path': request.path,
+
+        'method': request.method,
+
+        'status': 'not_found',
+
+        'timestamp': datetime.now().isoformat()
+
+    }), 404
+
+
+
+@app.errorhandler(500)
+
+def internal_error(error):
+
+    """500 error handler."""
+
+    logger.error(f"Internal server error: {str(error)}")
+
+    return jsonify({
+
+        'error': 'Internal server error',
+
+        'details': str(error) if app.debug else 'An unexpected error occurred',
+
+        'status': 'error',
+
+        'timestamp': datetime.now().isoformat()
+
+    }), 500
+
+
+
+if __name__ == '__main__':
+
+    logger.info("Starting DiagnoAI Pancreas API Server...")
+
+    logger.info(f"Model loaded: {diagnostic_system.model is not None}")
+
+    logger.info(f"AI client available: {groq_client is not None}")
+
+
+
+    app.run(
+
+        debug=os.getenv('FLASK_DEBUG', 'False').lower() == 'true',
+
+        host='0.0.0.0',
+
+        port=int(os.getenv('PORT', 5000))
+
+    )
+
