@@ -1,6 +1,6 @@
 const en = {
   nav_home: 'Home', nav_about: 'About', nav_features: 'Features', nav_diag: 'Diagnostic Tool',
-  audience: 'Audience', audience_patient: 'Patient', audience_doctor: 'Doctor',
+  audience: 'Audience', audience_patient: 'Patient', audience_doctor: 'Doctor', audience_scientist: 'Scientist',
   language: 'Language',
   diag_title: 'Pancreatic Cancer Diagnostic Tool',
   diag_subtitle: 'Enter patient laboratory values for AI-powered risk assessment',
@@ -47,6 +47,10 @@ const en = {
   model_footer: 'Model: Random Forest Classifier v2.1.0 | Trained on 10,000+ patient records',
   generating_report: 'Generating Report...',
   download_btn: 'Download PDF Report',
+  risk_summary_title: 'Risk Summary',
+  model_insights_title: 'Model Insights (SHAP)',
+  lab_section_core: 'Hematology & Cell Counts',
+  lab_section_metabolic: 'Metabolic, Hepatic & Coag',
   footer_fda: 'FDA Approved Algorithm',
   footer_hipaa: 'HIPAA Compliant',
   footer_model_performance: 'Model Performance',

@@ -253,7 +253,8 @@ export default function App() {
       const aiExplanation = data.ai_explanation || data.aiExplanation || "";
       setResult({ ...data, ai_explanation: aiExplanation });
       setAnalysisLanguage(language);
-      setAnalysisCache({ [language]: aiExplanation });
+      const cacheKey = `${language}:${clientType}`;
+      setAnalysisCache({ [cacheKey]: aiExplanation });
     } catch (e) {
       setErr(`Failed to reach the server. Make sure Flask is running on ${API_BASE} (error: ${e.message})`);
     } finally {
@@ -272,7 +273,8 @@ export default function App() {
       return;
     }
 
-    const cached = analysisCache[lang];
+    const cacheKey = `${lang}:${clientType}`;
+    const cached = analysisCache[cacheKey];
     if (cached !== undefined) {
       setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
       return;
@@ -305,7 +307,7 @@ export default function App() {
 
       const data = await response.json();
       const newText = data.ai_explanation || data.aiExplanation || "";
-      setAnalysisCache((prev) => ({ ...prev, [lang]: newText }));
+      setAnalysisCache((prev) => ({ ...prev, [cacheKey]: newText }));
       setResult((prev) =>
         prev
           ? {
@@ -389,7 +391,64 @@ export default function App() {
   };
 
   const baseAiExplanation = result?.ai_explanation || result?.aiExplanation || "";
-  const activeAiExplanation = analysisCache[analysisLanguage] ?? baseAiExplanation;
+  const activeAiExplanation = analysisCache[`${analysisLanguage}:${clientType}`] ?? baseAiExplanation;
+
+  // Regenerate commentary when audience changes (if we already have a result)
+  useEffect(() => {
+    const regenerateForAudience = async () => {
+      if (!result) return;
+      const lang = analysisLanguage;
+      const key = `${lang}:${clientType}`;
+      const cached = analysisCache[key];
+      if (cached !== undefined) {
+        setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
+        return;
+      }
+      setAnalysisRefreshing(true);
+      try {
+        const response = await fetch(`${API_BASE}/api/commentary`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            analysis: result,
+            patient_values: result.patient_values,
+            shap_values: result.shap_values || result.shapValues || [],
+            language: lang,
+            client_type: clientType,
+          }),
+        });
+        if (!response.ok) {
+          let msg = `${response.status} ${response.statusText}`;
+          try {
+            const errJson = await response.json();
+            if (errJson?.error) msg = errJson.error;
+          } catch {}
+          throw new Error(msg);
+        }
+        const data = await response.json();
+        const newText = data.ai_explanation || data.aiExplanation || "";
+        setAnalysisCache((prev) => ({ ...prev, [key]: newText }));
+        setResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                ai_explanation: newText,
+                language: data.language || lang,
+                risk_level: data.risk_level || prev.risk_level,
+              }
+            : prev,
+        );
+      } catch (e) {
+        setErr(`Failed to refresh commentary: ${e.message}`);
+      } finally {
+        setAnalysisRefreshing(false);
+      }
+    };
+
+    if (result) {
+      regenerateForAudience();
+    }
+  }, [clientType]);
 
   const renderSection = () => {
     switch (currentSection) {
@@ -476,7 +535,7 @@ function Navigation({
   ];
   return (
     <nav className="bg-white/90 backdrop-blur shadow-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1800px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-6">
           {/* Logo */}
           <div className="flex items-center space-x-2">
@@ -877,7 +936,7 @@ function DiagnosticTool({
 
   return (
     <div className="py-16 bg-slate-100" dir="ltr">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1800px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-slate-900 mb-3">{t('diag_title')}</h1>
           <p className="text-slate-500 max-w-3xl mx-auto">{t('diag_subtitle')}</p>
@@ -894,8 +953,8 @@ function DiagnosticTool({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-10 p-10 lg:grid-cols-2">
-            <div>
+          <div className="grid grid-cols-1 gap-8 p-6 md:p-8 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="lg:col-span-2 xl:col-span-2">
               <h3 className="text-xl font-semibold text-slate-900 mb-6">{t('diag_patient_values')}</h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -919,48 +978,44 @@ function DiagnosticTool({
                     <button
                       type="button"
                       onClick={() => setClientType('patient')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition ${
+                      className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition inline-flex items-center justify-center gap-2 ${
                         clientType === 'patient'
                           ? 'bg-white text-blue-600 shadow'
                           : 'text-slate-600 hover:text-blue-600'
                       }`}
                     >
+                      <Users className="h-4 w-4" />
                       {t('audience_patient')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setClientType('doctor')}
-                      className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition ${
+                      className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition inline-flex items-center justify-center gap-2 ${
                         clientType === 'doctor'
                           ? 'bg-white text-blue-600 shadow'
                           : 'text-slate-600 hover:text-blue-600'
                       }`}
                     >
+                      <Stethoscope className="h-4 w-4" />
                       {t('audience_doctor')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClientType('scientist')}
+                      className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition inline-flex items-center justify-center gap-2 ${
+                        clientType === 'scientist'
+                          ? 'bg-white text-blue-600 shadow'
+                          : 'text-slate-600 hover:text-blue-600'
+                      }`}
+                    >
+                      <Microscope className="h-4 w-4" />
+                      {t('audience_scientist')}
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {Object.entries(form).map(([key, value]) => (
-                  <div key={key} className="space-y-1">
-                    <label className="text-sm font-medium text-slate-600">{key.toUpperCase()}</label>
-                    <input
-                      type="text"
-                      name={key}
-                      value={value}
-                      onChange={handleChange}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <p className="text-xs text-slate-400">
-                      Range: {RANGES[key]?.[0]} - {RANGES[key]?.[1]}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 mb-4">
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
@@ -986,6 +1041,45 @@ function DiagnosticTool({
                 </button>
               </div>
 
+              <div className="space-y-5">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">{t('lab_section_core')}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {['wbc','rbc','plt','hgb','hct','mpv','pdw','mono','baso_abs','baso_pct'].map((key) => (
+                      <div key={key} className="space-y-1">
+                        <label className="text-sm font-medium text-slate-600">{key.toUpperCase()}</label>
+                        <input
+                          type="text"
+                          name={key}
+                          value={form[key]}
+                          onChange={handleChange}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-slate-400">Range: {RANGES[key]?.[0]} - {RANGES[key]?.[1]}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">{t('lab_section_metabolic')}</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {['glucose','act','bilirubin'].map((key) => (
+                      <div key={key} className="space-y-1">
+                        <label className="text-sm font-medium text-slate-600">{key.toUpperCase()}</label>
+                        <input
+                          type="text"
+                          name={key}
+                          value={form[key]}
+                          onChange={handleChange}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-xs text-slate-400">Range: {RANGES[key]?.[0]} - {RANGES[key]?.[1]}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {err && (
                 <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
                   {err}
@@ -993,7 +1087,7 @@ function DiagnosticTool({
               )}
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-6 xl:sticky xl:top-6 lg:col-span-1 xl:col-span-2">
               {!result && (
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 p-6 text-center shadow-sm">
                   <Microscope className="h-12 w-12 text-blue-500 mx-auto mb-4" />
@@ -1003,46 +1097,107 @@ function DiagnosticTool({
                 </div>
               )}
 
-              <div className="rounded-2xl border border-slate-100 bg-white p-6 space-y-4 shadow-sm">
-                <h4 className="text-lg font-semibold text-slate-900">{t('metrics_title')}</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
-                  {['accuracy', 'precision', 'recall', 'f1_score'].map((metricKey) => (
-                    <div key={metricKey}>
-                      <p className="font-medium text-slate-800">
-                        {metricKey === 'accuracy' && t('home_stat_accuracy')}
-                        {metricKey === 'precision' && 'Precision'}
-                        {metricKey === 'recall' && 'Recall'}
-                        {metricKey === 'f1_score' && 'F1 Score'}
-                      </p>
-                      <p>
-                        {result?.metrics?.[metricKey] !== undefined
-                          ? `${(Number(result.metrics[metricKey]) * 100).toFixed(1)}%`
-                          : metricKey === 'accuracy'
-                            ? '97.4%'
-                            : metricKey === 'precision'
-                              ? '95.8%'
-                              : metricKey === 'recall'
-                                ? '94.1%'
-                                : '95.0%'}
-                      </p>
+              {result ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="rounded-2xl border border-slate-100 bg-white p-6 space-y-4 shadow-sm">
+                    <h4 className="text-lg font-semibold text-slate-900">{t('metrics_title')}</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
+                      {['accuracy', 'precision', 'recall', 'f1_score'].map((metricKey) => (
+                        <div key={metricKey}>
+                          <p className="font-medium text-slate-800">
+                            {metricKey === 'accuracy' && t('home_stat_accuracy')}
+                            {metricKey === 'precision' && 'Precision'}
+                            {metricKey === 'recall' && 'Recall'}
+                            {metricKey === 'f1_score' && 'F1 Score'}
+                          </p>
+                          <p>
+                            {result?.metrics?.[metricKey] !== undefined
+                              ? `${(Number(result.metrics[metricKey]) * 100).toFixed(1)}%`
+                              : metricKey === 'accuracy'
+                                ? '97.4%'
+                                : metricKey === 'precision'
+                                  ? '95.8%'
+                                  : metricKey === 'recall'
+                                    ? '94.1%'
+                                    : '95.0%'}
+                          </p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                  <div className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-2">
+                    <h4 className="text-lg font-semibold text-slate-900">{t('risk_summary_title')}</h4>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <div className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-3 py-1.5 text-blue-700 border border-blue-100">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span className="font-semibold">{t('risk_score')}:</span>
+                        <span>{(Number(result?.probability ?? 0) * 100).toFixed(1)}%</span>
+                      </div>
+                      <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${
+                        result?.prediction === 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : 'bg-rose-50 text-rose-700 border border-rose-100'
+                      }`}>
+                        {result?.prediction === 0 ? t('result_low') : t('result_high')}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-100 bg-white p-6 space-y-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-slate-900">{t('metrics_title')}</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm text-slate-500">
+                    {['accuracy', 'precision', 'recall', 'f1_score'].map((metricKey) => (
+                      <div key={metricKey}>
+                        <p className="font-medium text-slate-800">
+                          {metricKey === 'accuracy' && t('home_stat_accuracy')}
+                          {metricKey === 'precision' && 'Precision'}
+                          {metricKey === 'recall' && 'Recall'}
+                          {metricKey === 'f1_score' && 'F1 Score'}
+                        </p>
+                        <p>
+                          {result?.metrics?.[metricKey] !== undefined
+                            ? `${(Number(result.metrics[metricKey]) * 100).toFixed(1)}%`
+                            : metricKey === 'accuracy'
+                              ? '97.4%'
+                              : metricKey === 'precision'
+                                ? '95.8%'
+                                : metricKey === 'recall'
+                                  ? '94.1%'
+                                  : '95.0%'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {result && (
                 <>
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h4 className="text-lg font-semibold text-blue-700 flex items-center gap-2">
-                          <CheckCircle2 className="h-5 w-5" />
-                          {t('risk_score')}: {(Number(result?.probability ?? 0) * 100).toFixed(1)}%
-                        </h4>
-                        <p className="text-sm text-blue-700">
-                          {result?.prediction === 0 ? t('result_low') : t('result_high')}
-                        </p>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-2">
+                    <h4 className="text-lg font-semibold text-slate-900">{t('risk_summary_title')}</h4>
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <div className="inline-flex items-center gap-2 rounded-md bg-blue-50 px-3 py-1.5 text-blue-700 border border-blue-100">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span className="font-semibold">{t('risk_score')}:</span>
+                        <span>{(Number(result?.probability ?? 0) * 100).toFixed(1)}%</span>
                       </div>
+                      <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${
+                        result?.prediction === 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : 'bg-rose-50 text-rose-700 border border-rose-100'
+                      }`}>
+                        {result?.prediction === 0 ? t('result_low') : t('result_high')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+                        <BarChart3 className="h-4 w-4" />
+                        {t('model_insights_title')}
+                      </h5>
                       <button
                         type="button"
                         onClick={() => setShowGraphs((prev) => !prev)}
@@ -1055,10 +1210,7 @@ function DiagnosticTool({
                       hasShapDetails ? (
                         <div className="space-y-4 pt-2">
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-                              <BarChart3 className="h-4 w-4" />
-                              {t('shap_title')}
-                            </h5>
+                            <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">{t('shap_title')}</h5>
                             <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-slate-500">
                               <span className="flex items-center gap-1">
                                 <span className="h-2 w-3 rounded-full bg-rose-500" />
@@ -1337,29 +1489,34 @@ function DiagnosticTool({
                     )}
                   </div>
 
-                    <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3">
-                      <h4 className="text-lg font-semibold text-slate-900">Clinical Guideline Sources</h4>
-                      <p className="text-xs text-slate-400">
-                        Authoritative references that inform this analysis.
-                      </p>
-                      <ul className="space-y-2 text-sm">
-                        {GUIDELINE_LINKS.map(({ label, href }) => (
-                          <li key={label}>
-                            <a
-                              className="text-blue-600 hover:text-blue-700 underline decoration-blue-200 underline-offset-2"
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="text-[11px] text-slate-500">
-                        DiagnoAI validation: 94% precision and 94% recall within the internal clinical dataset.
-                      </p>
-                    </div>
+                    <details className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-900 list-none flex items-center justify-between">
+                        <span>Clinical Guideline Sources</span>
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-slate-400">
+                          Authoritative references that inform this analysis.
+                        </p>
+                        <ul className="space-y-2 text-sm">
+                          {GUIDELINE_LINKS.map(({ label, href }) => (
+                            <li key={label}>
+                              <a
+                                className="text-blue-600 hover:text-blue-700 underline decoration-blue-200 underline-offset-2"
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {label}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[11px] text-slate-500">
+                          DiagnoAI validation: 94% precision and 94% recall within the internal clinical dataset.
+                        </p>
+                      </div>
+                    </details>
 
                     <button
                       onClick={handleDownload}
