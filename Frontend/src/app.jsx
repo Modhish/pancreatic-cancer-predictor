@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, Brain, CheckCircle2, AlertTriangle, Gauge, Loader2, ShieldCheck,
   Stethoscope, Users, Award, BarChart3, ScatterChart, Menu, X, ArrowRight, 
@@ -65,12 +65,50 @@ const GUIDELINE_LINKS = [
   },
 ];
 
+// Heuristic fix for mojibake (UTF-8 read as Latin-1 and re-encoded)
+const fixMojibake = (s) => {
+  try {
+    // Detect common mojibake markers for Cyrillic (Ã, Ã‘ sequences)
+    if (!/[ÃÃ‘][\u0080-\u00BF]/.test(s)) return s;
+    // Convert each code unit to a byte and reinterpret as UTF-8
+    const bytes = new Uint8Array([...s].map((ch) => ch.charCodeAt(0) & 0xff));
+    const decoded = new TextDecoder('utf-8').decode(bytes);
+    return decoded;
+  } catch {
+    return s;
+  }
+};
+
 const parseAiAnalysis = (text) => {
   if (!text || typeof text !== 'string') {
     return null;
   }
 
-  const lines = text
+  // Repair common encoding corruption if present
+  const safeText = (function repairTextEncoding(s) {
+    try {
+      if (!s || typeof s !== 'string') return s;
+      const suspicious = /[\u00C3\u00C2\u00D0\u00D1]/.test(s);
+      const toBytes = (str) => new Uint8Array([...str].map((ch) => ch.charCodeAt(0) & 0xff));
+      const countCyr = (str) => (str.match(/[\u0400-\u04FF]/g) || []).length;
+      const countGib = (str) => (str.match(/[\u00C3\u00C2\u00D0\u00D1]/g) || []).length;
+      // Iteratively decode up to 3 passes while it clearly improves readability
+      let out = s;
+      for (let i = 0; i < 3 && suspicious.test(out); i++) {
+        const decoded = new TextDecoder('utf-8').decode(toBytes(out));
+        if (countCyr(decoded) > countCyr(out) || countGib(out) > 0) {
+          out = decoded;
+        } else {
+          break;
+        }
+      }
+      return out;
+    } catch {
+      return s;
+    }
+  })(text);
+
+  const lines = safeText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -79,9 +117,12 @@ const parseAiAnalysis = (text) => {
     return null;
   }
 
-  const headingPattern = /^[A-Z\u0410-\u042F0-9][A-Z\u0410-\u042F0-9\s&|\u00B7\-\.,:\/]+$/;
+  // Allow Latin and full Cyrillic block (upper/lower), digits and basic symbols
+  const headingPattern = /^[A-Za-z\u0400-\u04FF0-9][A-Za-z\u0400-\u04FF0-9\s&|\u00B7\-\.,:\/]+$/;
   const bulletPattern = /^[-\u2022\u25CF]\s+/;
-  const footerMarkers = ['REMINDER', '???????????'];
+  const RU_NAPOMINANIE = String.fromCharCode(0x041D,0x0410,0x041F,0x041E,0x041C,0x0418,0x041D,0x0410,0x041D,0x0418,0x0415);
+  const RU_PAMYATKA = String.fromCharCode(0x041F,0x0410,0x041C,0x042F,0x0422,0x041A,0x0410);
+  const footerMarkers = ['REMINDER', RU_NAPOMINANIE, RU_PAMYATKA];
 
   const header = lines.shift();
   if (!header) {
@@ -171,13 +212,7 @@ export default function App() {
     }
     return 'en';
   });
-  const [analysisLanguage, setAnalysisLanguage] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('language');
-      return saved === 'ru' ? 'ru' : 'en';
-    }
-    return 'en';
-  });
+  // AI commentary language now follows page language; no separate state
   const [analysisCache, setAnalysisCache] = useState({});
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
 
@@ -189,11 +224,7 @@ export default function App() {
     }
   }, [language]);
 
-  useEffect(() => {
-    if (!result) {
-      setAnalysisLanguage(language);
-    }
-  }, [language, result]);
+  // No separate analysis language; commentary follows page language
 
   const handleChange = (e) => {
     setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
@@ -252,7 +283,6 @@ export default function App() {
       const data = await res.json();
       const aiExplanation = data.ai_explanation || data.aiExplanation || "";
       setResult({ ...data, ai_explanation: aiExplanation });
-      setAnalysisLanguage(language);
       const cacheKey = `${language}:${clientType}`;
       setAnalysisCache({ [cacheKey]: aiExplanation });
     } catch (e) {
@@ -262,69 +292,7 @@ export default function App() {
     }
   };
 
-  const handleAnalysisLanguageChange = async (lang) => {
-    const previousLanguage = analysisLanguage;
-    if (lang === previousLanguage) {
-      return;
-    }
-    setAnalysisLanguage(lang);
-
-    if (!result) {
-      return;
-    }
-
-    const cacheKey = `${lang}:${clientType}`;
-    const cached = analysisCache[cacheKey];
-    if (cached !== undefined) {
-      setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
-      return;
-    }
-
-    setAnalysisRefreshing(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/commentary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          analysis: result,
-          patient_values: result.patient_values,
-          shap_values: result.shap_values || result.shapValues || [],
-          language: lang,
-          client_type: clientType,
-        }),
-      });
-
-      if (!response.ok) {
-        let msg = `${response.status} ${response.statusText}`;
-        try {
-          const errJson = await response.json();
-          if (errJson?.error) {
-            msg = errJson.error;
-          }
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await response.json();
-      const newText = data.ai_explanation || data.aiExplanation || "";
-      setAnalysisCache((prev) => ({ ...prev, [cacheKey]: newText }));
-      setResult((prev) =>
-        prev
-          ? {
-              ...prev,
-              ai_explanation: newText,
-              language: data.language || lang,
-              risk_level: data.risk_level || prev.risk_level,
-            }
-          : prev,
-      );
-    } catch (refreshError) {
-      setErr(`Failed to refresh commentary: ${refreshError.message}`);
-      setAnalysisLanguage(previousLanguage);
-    } finally {
-      setAnalysisRefreshing(false);
-    }
-  };
+  // Removed: separate analysis language toggle/handler; commentary follows page language
 
   const handleDownload = async () => {
     if (!result) {
@@ -346,9 +314,9 @@ export default function App() {
             ...result,
             shap_values: shapPayload,
             ai_explanation: aiExplanation,
-            language: analysisLanguage,
+            language: language,
           },
-          language: analysisLanguage,
+          language: language,
         })
       });
 
@@ -387,22 +355,25 @@ export default function App() {
     setResult(null);
     setErr("");
     setAnalysisCache({});
-    setAnalysisLanguage(language);
+    // commentary language follows page language
   };
 
   const baseAiExplanation = result?.ai_explanation || result?.aiExplanation || "";
-  const activeAiExplanation = analysisCache[`${analysisLanguage}:${clientType}`] ?? baseAiExplanation;
+  const activeAiExplanation = analysisCache[`${language}:${clientType}`] ?? baseAiExplanation;
 
   // Regenerate commentary when audience changes (if we already have a result)
   useEffect(() => {
     const regenerateForAudience = async () => {
       if (!result) return;
-      const lang = analysisLanguage;
+      const lang = language;
       const key = `${lang}:${clientType}`;
       const cached = analysisCache[key];
-      if (cached !== undefined) {
-        setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
-        return;
+      // For Russian, always regenerate to avoid stale/corrupted text
+      if (!(String(lang).toLowerCase().startsWith('ru'))) {
+        if (cached !== undefined) {
+          setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
+          return;
+        }
       }
       setAnalysisRefreshing(true);
       try {
@@ -448,7 +419,7 @@ export default function App() {
     if (result) {
       regenerateForAudience();
     }
-  }, [clientType]);
+  }, [language, clientType]);
 
   const renderSection = () => {
     switch (currentSection) {
@@ -470,9 +441,7 @@ export default function App() {
           setLanguage={setLanguage}
           clientType={clientType}
           setClientType={setClientType}
-          analysisLanguage={analysisLanguage}
           analysisRefreshing={analysisRefreshing}
-          onAnalysisLanguageChange={handleAnalysisLanguageChange}
           aiExplanation={activeAiExplanation}
           t={t}
         />
@@ -772,9 +741,7 @@ function DiagnosticTool({
   setLanguage,
   clientType,
   setClientType,
-  analysisLanguage,
   analysisRefreshing,
-  onAnalysisLanguageChange,
   aiExplanation,
   t,
 }) {
@@ -932,7 +899,16 @@ function DiagnosticTool({
   };
   const hasShapDetails = shapSummary.length > 0 && shapWaterfall;
 
-  const aiStructured = useMemo(() => parseAiAnalysis(aiExplanation), [aiExplanation]);
+  const isCyrillicContent = useMemo(() => {
+    const s = typeof aiExplanation === 'string' ? aiExplanation : '';
+    const cyrMatches = s.match(/[\u0400-\u04FF]/g) || [];
+    return cyrMatches.length >= 8; // treat as Russian text if enough Cyrillic
+  }, [aiExplanation]);
+
+  const aiStructured = useMemo(() => {
+    if (isCyrillicContent) return null;
+    return parseAiAnalysis(aiExplanation);
+  }, [aiExplanation, isCyrillicContent]);
 
   return (
     <div className="py-16 bg-slate-100" dir="ltr">
@@ -1085,6 +1061,96 @@ function DiagnosticTool({
                   {err}
                 </div>
               )}
+
+              {result && (
+                <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3 mt-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-lg font-semibold text-slate-900">{t('ai_title')}</h4>
+                      <p className="text-xs text-slate-400">{t('ai_disclaimer')}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {analysisRefreshing && (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      )}
+                    </div>
+                  </div>
+                  {isCyrillicContent ? (
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                      {aiExplanation || t('ai_unavailable')}
+                    </div>
+                  ) : aiStructured ? (
+                    <div className="space-y-5">
+                      <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 p-5 text-white shadow">
+                        <h5 className="text-lg font-semibold">{aiStructured.header}</h5>
+                        {aiStructured.subtitle && (
+                          <p className="mt-1 text-sm text-blue-100/90">{aiStructured.subtitle}</p>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        {aiStructured.sections.map((section) => (
+                          <div
+                            key={section.title}
+                            className="rounded-2xl border border-slate-100 bg-white/95 p-5 shadow-sm transition hover:shadow-md"
+                          >
+                            <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              {section.title}
+                            </h6>
+                            <div className="mt-3 space-y-3 text-sm text-slate-600">
+                              {section.paragraphs.map((paragraph, idx) => (
+                                <p key={`paragraph-${section.title}-${idx}`}>{paragraph}</p>
+                              ))}
+                              {section.bullets.length > 0 && (
+                                <ul className="space-y-2">
+                                  {section.bullets.map((item, idx) => (
+                                    <li key={`bullet-${section.title}-${idx}`} className="flex items-start gap-2">
+                                      <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-blue-500" />
+                                      <span>{item}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {aiStructured.footer && (
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4 text-sm text-blue-700">
+                          <h6 className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                            {aiStructured.footer.title}
+                          </h6>
+                          <p className="mt-1 leading-relaxed">{aiStructured.footer.text}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                      {(() => {
+                        const s = aiExplanation;
+                        if (!s || typeof s !== 'string') return t('ai_unavailable');
+                        try {
+                          const suspect = /[\u00C3\u00C2\u00D0\u00D1]/;
+                          const toBytes = (str) => new Uint8Array([...str].map((ch) => ch.charCodeAt(0) & 0xff));
+                          const countCyr = (str) => (str.match(/[\u0400-\u04FF]/g) || []).length;
+                          const countGib = (str) => (str.match(/[\u00C3\u00C2\u00D0\u00D1]/g) || []).length;
+                          let out = s;
+                          for (let i = 0; i < 3 && suspect.test(out); i++) {
+                            const decoded = new TextDecoder('utf-8').decode(toBytes(out));
+                            if (countCyr(decoded) > countCyr(out) || countGib(out) > 0) {
+                              out = decoded;
+                            } else {
+                              break;
+                            }
+                          }
+                          return out;
+                        } catch {
+                          return s;
+                        }
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-6 xl:sticky xl:top-6 lg:col-span-1 xl:col-span-2">
@@ -1214,11 +1280,11 @@ function DiagnosticTool({
                             <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-slate-500">
                               <span className="flex items-center gap-1">
                                 <span className="h-2 w-3 rounded-full bg-rose-500" />
-                                <span>Red = Danger (risk ↑)</span>
+                                <span>Red = Danger (risk â†‘)</span>
                               </span>
                               <span className="flex items-center gap-1">
                                 <span className="h-2 w-3 rounded-full bg-blue-500" />
-                                <span>Blue = Protective (risk ↓)</span>
+                                <span>Blue = Protective (risk â†“)</span>
                               </span>
                               {shapFxDisplay !== null && (
                                 <span className="text-xs text-slate-600">
@@ -1409,85 +1475,7 @@ function DiagnosticTool({
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h4 className="text-lg font-semibold text-slate-900">{t('ai_title')}</h4>
-                        <p className="text-xs text-slate-400">{t('ai_disclaimer')}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {analysisRefreshing && (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                        )}
-                        <div className="flex rounded-full bg-slate-100 p-1">
-                          {SUPPORTED_LANGUAGES.map(({ value, label }) => (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => onAnalysisLanguageChange(value)}
-                              disabled={analysisRefreshing || !result}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-full transition disabled:opacity-60 disabled:cursor-not-allowed ${
-                                analysisLanguage === value
-                                  ? 'bg-blue-600 text-white shadow'
-                                  : 'text-slate-500 hover:text-blue-600'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    {aiStructured ? (
-                      <div className="space-y-5">
-                        <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 p-5 text-white shadow">
-                          <h5 className="text-lg font-semibold">{aiStructured.header}</h5>
-                          {aiStructured.subtitle && (
-                            <p className="mt-1 text-sm text-blue-100/90">{aiStructured.subtitle}</p>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                          {aiStructured.sections.map((section) => (
-                            <div
-                              key={section.title}
-                              className="rounded-2xl border border-slate-100 bg-white/95 p-5 shadow-sm transition hover:shadow-md"
-                            >
-                              <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                {section.title}
-                              </h6>
-                              <div className="mt-3 space-y-3 text-sm text-slate-600">
-                                {section.paragraphs.map((paragraph, idx) => (
-                                  <p key={`paragraph-${section.title}-${idx}`}>{paragraph}</p>
-                                ))}
-                                {section.bullets.length > 0 && (
-                                  <ul className="space-y-2">
-                                    {section.bullets.map((item, idx) => (
-                                      <li key={`bullet-${section.title}-${idx}`} className="flex items-start gap-2">
-                                        <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-blue-500" />
-                                        <span>{item}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        {aiStructured.footer && (
-                          <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4 text-sm text-blue-700">
-                            <h6 className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-                              {aiStructured.footer.title}
-                            </h6>
-                            <p className="mt-1 leading-relaxed">{aiStructured.footer.text}</p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                        {aiExplanation || t('ai_unavailable')}
-                      </div>
-                    )}
-                  </div>
+                  
 
                     <details className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
                       <summary className="cursor-pointer text-sm font-semibold text-slate-900 list-none flex items-center justify-between">
@@ -1705,5 +1693,6 @@ function Footer({ onNavigate, t }) {
     </footer>
   );
 }
+
 
 

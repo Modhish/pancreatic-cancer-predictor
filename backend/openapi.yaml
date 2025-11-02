@@ -1,0 +1,104 @@
+openapi: 3.0.3
+info:
+  title: DiagnoAI Pancreas API
+  version: 2.1.0
+  description: Minimal OpenAPI spec for core endpoints.
+servers:
+  - url: http://localhost:5000
+paths:
+  /api/predict:
+    post:
+      summary: Submit labs for prediction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wbc: { type: number }
+                rbc: { type: number }
+                plt: { type: number }
+                hgb: { type: number }
+                hct: { type: number }
+                mpv: { type: number }
+                pdw: { type: number }
+                mono: { type: number }
+                baso_abs: { type: number }
+                baso_pct: { type: number }
+                glucose: { type: number }
+                act: { type: number }
+                bilirubin: { type: number }
+                language: { type: string, default: en }
+                client_type: { type: string, default: patient }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prediction: { type: integer }
+                  probability: { type: number }
+                  shap_values: { type: array, items: { type: object } }
+                  ai_explanation: { type: string }
+        '400': { description: Validation error }
+  /api/commentary:
+    post:
+      summary: Regenerate AI commentary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                analysis: { type: object }
+                patient_values: { type: object }
+                shap_values: { type: array, items: { type: object } }
+                language: { type: string }
+                client_type: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ai_explanation: { type: string }
+  /api/report:
+    post:
+      summary: Generate a PDF diagnostic report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patient: { type: object }
+                result: { type: object }
+                language: { type: string }
+      responses:
+        '200':
+          description: PDF
+          content:
+            application/pdf: { schema: { type: string, format: binary } }
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /api/status:
+    get:
+      summary: System status
+      responses:
+        '200': { description: OK }
+  /api/model-info:
+    get:
+      summary: Model information
+      responses:
+        '200': { description: OK }
+

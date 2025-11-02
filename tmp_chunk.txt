@@ -1,0 +1,21 @@
+        # Plain, deterministic Russian template to guarantee readability
+        if locale_code == 'ru':
+            try:
+                risk_level = "???????" if probability > 0.7 else "?????????" if probability > 0.3 else "??????"
+                risk_header = f"??????????? ????? | {risk_level.upper()} ????"
+                prob_line = f"??????????? ?????: {probability*100:.1f}%"
+
+                def ru_label(code: str) -> str:
+                    key = str(code or '').upper()
+                    return RU_FEATURE_LABELS.get(key, FEATURE_LABELS.get('ru', FEATURE_LABELS['en']).get(key, key))
+
+                def impact_word(impact: str) -> str:
+                    return '???????? ????' if str(impact).lower().strip() == 'positive' else '??????? ????'
+
+                bullet_lines: list[str] = []
+                for sv in shap_values[:5]:
+                    feature = ru_label(sv.get('feature', ''))
+                    word = impact_word(sv.get('impact', 'neutral'))
+                    try:
+                        val = float(sv.get('value', 0.0))
+                        val_str = f"{val:+.3f}"

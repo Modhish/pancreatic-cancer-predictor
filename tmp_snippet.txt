@@ -1,0 +1,130 @@
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalysisLanguageChange = async (lang) => {
+    const previousLanguage = analysisLanguage;
+    if (lang === previousLanguage) {
+      return;
+    }
+    setAnalysisLanguage(lang);
+
+    if (!result) {
+      return;
+    }
+
+    const cacheKey = `${lang}:${clientType}`;
+    const cached = analysisCache[cacheKey];
+    if (cached !== undefined) {
+      setResult((prev) => (prev ? { ...prev, ai_explanation: cached, language: lang } : prev));
+      return;
+    }
+
+    setAnalysisRefreshing(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/commentary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysis: result,
+          patient_values: result.patient_values,
+          shap_values: result.shap_values || result.shapValues || [],
+          language: lang,
+          client_type: clientType,
+        }),
+      });
+
+      if (!response.ok) {
+        let msg = `${response.status} ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.error) {
+            msg = errJson.error;
+          }
+        } catch {}
+        throw new Error(msg);
+      }
+
+      const data = await response.json();
+      const newText = data.ai_explanation || data.aiExplanation || "";
+      setAnalysisCache((prev) => ({ ...prev, [cacheKey]: newText }));
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              ai_explanation: newText,
+              language: data.language || lang,
+              risk_level: data.risk_level || prev.risk_level,
+            }
+          : prev,
+      );
+    } catch (refreshError) {
+      setErr(`Failed to refresh commentary: ${refreshError.message}`);
+      setAnalysisLanguage(previousLanguage);
+    } finally {
+      setAnalysisRefreshing(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!result) {
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const patientPayload = result.patient_values ? { ...result.patient_values } : { ...form };
+      const shapPayload = result.shap_values || result.shapValues || [];
+      const aiExplanation = activeAiExplanation;
+
+      const response = await fetch(`${API_BASE}/api/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient: patientPayload,
+          result: {
+            ...result,
+            shap_values: shapPayload,
+            ai_explanation: aiExplanation,
+            language: language,
+          },
+          language: language,
+        })
+      });
+
+      if (!response.ok) {
+        let message = `${response.status} ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.validation_errors) {
+            message = errJson.validation_errors.join("; ");
+          } else if (errJson?.error) {
+            message = errJson.error;
+          }
+        } catch {}
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.download = `diagnoai-pancreas-report-${timestamp}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setErr(`Failed to generate PDF report: ${downloadError.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setForm(Object.keys(defaultForm).reduce((acc, k) => ({ ...acc, [k]: "" }), {}));
+    setResult(null);
+    setErr("");
+    setAnalysisCache({});

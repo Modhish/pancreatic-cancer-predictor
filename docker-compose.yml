@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - FLASK_DEBUG=False
+      - PORT=5000
+      - GROQ_API_KEY=
+    ports:
+      - "5000:5000"
+  frontend:
+    build:
+      context: .
+      dockerfile: Frontend/Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+

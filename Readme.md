@@ -117,10 +117,11 @@ index.js                  # Node.js server with Express.js
 
 ### Core Endpoints
 - `POST /api/predict` - Single patient prediction
-- `POST /api/batch-predict` - Batch predictions (up to 10 patients)
-- `GET /api/status` - System status and health
+- `POST /api/commentary` - Regenerate AI commentary for an existing result
+- `POST /api/report` - Generate and download PDF report
+- `GET /api/health` - Health check endpoint
+- `GET /api/status` - System status and features
 - `GET /api/model-info` - Model information and metrics
-- `GET /health` - Health check endpoint
 
 ### Example API Usage
 
@@ -204,14 +205,26 @@ The system analyzes 13 key laboratory parameters:
 
 ### Testing
 ```bash
-# Backend tests
+# Backend tests (pytest)
 cd backend
-pytest tests/
+pytest -q
 
-# Frontend tests
-cd Frontend
+# Frontend tests (vitest)
+cd ../Frontend
 npm test
 ```
+
+### Docker (optional)
+```bash
+# Build and run both services
+docker compose up --build
+
+# Backend API at http://localhost:5000
+# Frontend at http://localhost:5173
+```
+
+### Compliance Notice
+This repository is a research/demo implementation. The API responses now avoid asserting clinical compliance or approvals. Do not use for clinical decisions without a formal validation, regulatory clearance, and a full compliance program.
 
 ### Deployment
 The system is designed for deployment on:

@@ -201,7 +201,7 @@ const ruFixed = {
 };
 
 // Use the clean, ASCII-escaped Russian map
-export const translations = { en, ru: en };
+export const translations = { en, ru: ruRuSafe };
 
 export const createTranslator = (language) => (key) => {
   const locale = translations[language] || translations.en;
@@ -210,7 +210,7 @@ export const createTranslator = (language) => (key) => {
 
 export const SUPPORTED_LANGUAGES = [
   { value: 'en', label: 'EN', name: 'English' },
-  { value: 'ru', label: 'RU', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
+  { value: 'ru', label: 'RU', name: '???????' },
 ];
 
 
@@ -253,3 +253,4 @@ const ruRuSafe = {
 // Apply override safely
 try { translations.ru = ruRuSafe; } catch (e) {}
 try { SUPPORTED_LANGUAGES.forEach((l) => { if (l.value === 'ru') l.name = '\u0420\u0443\u0441\u0441\u043a\u0438\u0439'; }); } catch (e) {}
+
