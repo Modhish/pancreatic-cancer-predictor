@@ -376,6 +376,13 @@ FEATURE_LABELS = {
 }
 
 # Correct Russian feature labels (use this instead of the corrupted legacy map)
+# Ensure RU feature label map symbol exists early to avoid NameError in flows
+# that call commentary generation before the final RU override is executed.
+try:
+    RU_FEATURE_LABELS  # type: ignore
+except NameError:  # pragma: no cover
+    RU_FEATURE_LABELS = FEATURE_LABELS.get('ru', FEATURE_LABELS['en'])
+
 RU_FEATURE_LABELS_OLD: dict[str, str] = {
     'WBC': 'Ãâ€ºÃÂµÃÂ¹ÃÂºÃÂ¾Ã‘â€ ÃÂ¸Ã‘â€šÃ‘â€¹',
     'RBC': 'ÃÂ­Ã‘â‚¬ÃÂ¸Ã‘â€šÃ‘â‚¬ÃÂ¾Ã‘â€ ÃÂ¸Ã‘â€šÃ‘â€¹',
@@ -629,17 +636,17 @@ COMMENTARY_LOCALE = {
             'monitoring_title': 'FOLLOW-UP WINDOWS',
             'monitoring': {
                 'High': [
-                    'Day 0Ã¢â‚¬â€œ7: complete imaging and cytology pathway; snapshot baseline datasets.',
-                    'Week 2Ã¢â‚¬â€œ4: review multidisciplinary findings; refine differential and data collection.',
+                    'Day 0-7: complete imaging and cytology pathway; snapshot baseline datasets.',
+                    'Week 2-4: review multidisciplinary findings; refine differential and data collection.',
                     'Quarterly: reassess biomarkers and metadata; monitor drift and missingness.'
                 ],
                 'Moderate': [
                     'Month 1: update labs and review symptom trajectory with standardized instruments.',
-                    'Month 2Ã¢â‚¬â€œ3: repeat imaging if markers trend upward or new pain emerges.',
+                    'Month 2-3: repeat imaging if markers trend upward or new pain emerges.',
                     'Semiannual: formal analytic checkpoint with study team.'
                 ],
                 'Low': [
-                    'Every 6Ã¢â‚¬â€œ12 months: surveillance labs/imaging per guideline thresholds.',
+                    'Every 6-12 months: surveillance labs/imaging per guideline thresholds.',
                     'Each visit: screen for pancreatitis flares, diabetes shifts, or weight changes.',
                     'Re-evaluate sooner with family history updates or new exposures.'
                 ]
@@ -1474,15 +1481,29 @@ def generate_clinical_commentary(self, prediction: int, probability: float,
         # Select the requested locale bundle (fallback to EN if unavailable)
         locale_bundle = COMMENTARY_LOCALE.get(locale_code, COMMENTARY_LOCALE['en'])
         scientist_mode = audience in {'scientist', 'researcher'}
-        audience_bundle = (
-            locale_bundle.get('scientist', locale_bundle['professional'])
-            if scientist_mode else (locale_bundle['professional'] if is_professional else locale_bundle['patient'])
-        )
+        # Select audience bundle robustly; RU locale may omit 'patient'/'scientist'
+        if scientist_mode:
+            audience_bundle = (
+                locale_bundle.get('scientist')
+                or locale_bundle.get('professional')
+                or locale_bundle.get('patient', {})
+            )
+        elif is_professional:
+            audience_bundle = (
+                locale_bundle.get('professional')
+                or locale_bundle.get('patient', {})
+            )
+        else:
+            audience_bundle = (
+                locale_bundle.get('patient')
+                or locale_bundle.get('professional')
+                or locale_bundle.get('scientist', {})
+            )
         probability_label = audience_bundle.get('probability_label', locale_bundle.get('probability_label', 'Risk probability'))
-        # For Russian, return deterministic, human‑crafted text to guarantee readability
+        # For Russian, use a deterministic RU generator to guarantee clean Cyrillic
         if locale_code == 'ru':
-            return self._generate_fallback_commentary(
-                prediction, probability, shap_values, language=language, client_type=audience
+            return self._generate_ru_commentary(
+                prediction, probability, shap_values, patient_data, audience
             )
         if groq_client is None:
 
@@ -1577,24 +1598,44 @@ def _generate_fallback_commentary(self, prediction: int, probability: float,
         locale_code = 'ru' if language.startswith('ru') else 'en'
         locale_bundle = COMMENTARY_LOCALE.get(locale_code, COMMENTARY_LOCALE['en'])
         scientist_mode = audience in {'scientist', 'researcher'}
-        audience_bundle = (
-            locale_bundle.get('scientist', locale_bundle['professional'])
-            if scientist_mode else (locale_bundle['professional'] if is_professional else locale_bundle['patient'])
-        )
+        # Robust audience bundle selection to avoid KeyError when locale lacks a section
+        if scientist_mode:
+            audience_bundle = (
+                locale_bundle.get('scientist')
+                or locale_bundle.get('professional')
+                or locale_bundle.get('patient', {})
+            )
+        elif is_professional:
+            audience_bundle = (
+                locale_bundle.get('professional')
+                or locale_bundle.get('patient', {})
+            )
+        else:
+            audience_bundle = (
+                locale_bundle.get('patient')
+                or locale_bundle.get('professional')
+                or locale_bundle.get('scientist', {})
+            )
         feature_labels = RU_FEATURE_LABELS if locale_code == 'ru' else FEATURE_LABELS['en']
 
         probability_pct = f"{probability:.1%}"
-        risk_label = locale_bundle['risk_labels'].get(risk_level, risk_level.upper())
-        probability_label = audience_bundle.get('probability_label', locale_bundle['probability_label'])
+        risk_label = (locale_bundle.get('risk_labels') or {}).get(risk_level, risk_level.upper())
+        probability_label = audience_bundle.get('probability_label', locale_bundle.get('probability_label', 'Risk probability'))
 
         top_factor_lines: list[str] = []
+        # Use safe impact terms map to avoid KeyError when locale omits it
+        impact_terms = audience_bundle.get('impact_terms', {
+            'positive': 'increases risk',
+            'negative': 'reduces risk',
+            'neutral': 'neutral contribution',
+        })
         for sv in shap_values[:5]:
             feature_key = str(sv.get('feature', 'Unknown')).upper()
             feature_label = feature_labels.get(feature_key, feature_key.replace('_', ' ').title())
             impact_key = str(sv.get('impact', 'neutral')).lower()
-            if impact_key not in audience_bundle['impact_terms']:
+            if impact_key not in impact_terms:
                 impact_key = 'neutral'
-            impact_phrase = audience_bundle['impact_terms'][impact_key]
+            impact_phrase = impact_terms.get(impact_key, 'neutral contribution')
             value = sv.get('value')
             try:
                 value_str = f"{float(value):+.3f}"
@@ -1603,19 +1644,50 @@ def _generate_fallback_commentary(self, prediction: int, probability: float,
             top_factor_lines.append(f"- {feature_label}: {impact_phrase} ({value_str})")
 
         while len(top_factor_lines) < 5:
-            top_factor_lines.append(f"- {audience_bundle['default_driver']}")
+            top_factor_lines.append(f"- {audience_bundle.get('default_driver', 'Additional factor within normal range')}")
 
+        header_tmpl = audience_bundle.get('header_template', 'CLINICAL DOSSIER | {risk} RISK')
         base_lines: list[str] = [
-            audience_bundle['header_template'].format(risk=risk_label),
+            header_tmpl.format(risk=risk_label),
             f"{probability_label}: {probability_pct}",
             ''
         ]
 
-        if is_professional:
-            synopsis_map = audience_bundle['synopsis']
-            actions_map = audience_bundle['actions']
-            coordination_map = audience_bundle['coordination']
-            monitoring_map = audience_bundle['monitoring']
+        # For Russian locale, use the professional structure regardless of audience
+        if is_professional or locale_code == 'ru':
+            synopsis_map = audience_bundle.get('synopsis', {})
+            actions_map = audience_bundle.get('actions', {})
+            coordination_map = audience_bundle.get('coordination', {})
+            monitoring_map = audience_bundle.get('monitoring', {})
+            # Supply RU defaults if any maps are missing
+            if locale_code == 'ru':
+                if not header_tmpl or header_tmpl == 'CLINICAL DOSSIER | {risk} RISK':
+                    header_tmpl = '\u041a\u041b\u0418\u041d\u0418\u0427\u0415\u0421\u041a\u041e\u0415 \u0414\u041e\u0421\u042c\u0415 | {risk} \u0420\u0418\u0421\u041a'
+                    base_lines[0] = header_tmpl.format(risk=risk_label)
+                if not isinstance(synopsis_map, dict) or not synopsis_map:
+                    synopsis_map = {
+                        'High': '\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u044f SHAP \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044e\u0442 \u0437\u043b\u043e\u043a\u0430\u0447\u0435\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443 \u043f\u0440\u043e\u0444\u0438\u043b\u044e; \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0443\u0441\u043a\u043e\u0440\u0435\u043d\u043d\u043e\u0435 \u0434\u043e\u0431\u043e\u043b\u044c\u043d\u043e\u0435 \u0438\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u0435.',
+                        'Moderate': '\u041f\u0440\u043e\u043c\u0435\u0436\u0443\u0442\u043e\u0447\u043d\u0430\u044f \u0432\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u044c; \u0443\u0442\u043e\u0447\u043d\u044f\u044e\u0449\u0438\u0435 \u0438\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f \u0441\u043d\u0438\u0436\u0430\u0442 \u043d\u0435\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0451\u043d\u043d\u043e\u0441\u0442\u044c.',
+                        'Low': '\u0412\u043a\u043b\u0430\u0434\u044b \u0431\u043b\u0438\u0437\u043a\u0438 \u043a \u0431\u0430\u0437\u043e\u0432\u043e\u0439 \u043b\u0438\u043d\u0438\u0438; \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435 \u0441 \u0442\u0440\u0438\u0433\u0433\u0435\u0440\u0430\u043c\u0438 \u0434\u043b\u044f \u0434\u043e\u0441\u0440\u043e\u0447\u043d\u043e\u0433\u043e \u043f\u0435\u0440\u0435\u0441\u043c\u043e\u0442\u0440\u0430.',
+                    }
+                if not isinstance(actions_map, dict) or not actions_map:
+                    actions_map = {
+                        'High': ['\u041a\u0422/\u041c\u0420\u0422 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 7 \u0434\u043d\u0435\u0439.', '\u042d\u0423\u0421 \u0441 \u0442\u043e\u043d\u043a\u043e\u0438\u0433\u043e\u043b\u044c\u043d\u043e\u0439 \u0430\u0441\u043f\u0438\u0440\u0430\u0446\u0438\u0435\u0439 \u043f\u0440\u0438 \u043d\u0435\u044f\u0441\u043d\u043e\u0441\u0442\u0438 \u043f\u043e \u041a\u0422/\u041c\u0420\u0422.'],
+                        'Moderate': ['\u041a\u0422/\u041c\u0420\u0422 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 2\u20134 \u043d\u0435\u0434\u0435\u043b\u0438.', '\u0414\u0438\u043d\u0430\u043c\u0438\u043a\u0430 \u043e\u043d\u043a\u043e\u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432 \u0438 \u043c\u0435\u0442\u0430\u0431\u043e\u043b\u0438\u043a\u0438.'],
+                        'Low': ['\u0415\u0436\u0435\u0433\u043e\u0434\u043d\u043e\u0435 \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435; \u0434\u043e\u0441\u0440\u043e\u0447\u043d\u044b\u0439 \u043f\u0435\u0440\u0435\u0441\u043c\u043e\u0442\u0440 \u043f\u0440\u0438 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f\u0445.'],
+                    }
+                if not isinstance(coordination_map, dict) or not coordination_map:
+                    coordination_map = {
+                        'High': ['\u0425\u0438\u0440\u0443\u0440\u0433\u0438\u044f + \u043e\u043d\u043a\u043e\u043b\u043e\u0433\u0438\u044f: \u0441\u043e\u0432\u043c\u0435\u0441\u0442\u043d\u043e\u0435 \u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435.'],
+                        'Moderate': ['\u041f\u0435\u0440\u0435\u0434\u0430\u0447\u0430 \u0441\u0432\u043e\u0434\u043a\u0438 \u0433\u0430\u0441\u0442\u0440\u043e\u044d\u043d\u0442\u0435\u0440\u043e\u043b\u043e\u0433\u0443/\u0422\u041f.'],
+                        'Low': ['\u0418\u043d\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0412\u041f\u0417, \u043f\u043b\u0430\u043d \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u044f.'],
+                    }
+                if not isinstance(monitoring_map, dict) or not monitoring_map:
+                    monitoring_map = {
+                        'High': ['0\u20137 \u0434\u043d\u0435\u0439: \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f/\u0446\u0438\u0442\u043e\u043b\u043e\u0433\u0438\u044f.'],
+                        'Moderate': ['1 \u043c\u0435\u0441.: \u043b\u0430\u0431\u043e\u0440\u0430\u0442\u043e\u0440\u0438\u044f + \u0441\u0438\u043c\u043f\u0442\u043e\u043c\u044b.'],
+                        'Low': ['6\u201312 \u043c\u0435\u0441.: \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435 \u043f\u043e \u043f\u043e\u0440\u043e\u0433\u0430\u043c.'],
+                    }
             # Prepare titles with safe RU overrides if needed
             if False and locale_code == 'ru':
                 drivers_title = 'ÃÅ¡Ãâ€ºÃÂ®ÃÂ§Ãâ€¢Ãâ€™ÃÂ«Ãâ€¢ ÃÂ¤ÃÂÃÅ¡ÃÂ¢ÃÅ¾ÃÂ ÃÂ« ÃÂ¡ÃËœÃâ€œÃÂÃÂÃâ€ºÃÂ'
@@ -1647,13 +1719,22 @@ def _generate_fallback_commentary(self, prediction: int, probability: float,
                     'Low': ['ÃÅ¡ÃÂ°ÃÂ¶ÃÂ´Ã‘â€¹ÃÂµ 6Ã¢â‚¬â€œ12 ÃÂ¼ÃÂµÃ‘ÂÃ‘ÂÃ‘â€ ÃÂµÃÂ²: ÃÂ»ÃÂ°ÃÂ±ÃÂ¾Ã‘â‚¬ÃÂ°Ã‘â€šÃÂ¾Ã‘â‚¬ÃÂ¸Ã‘Â/ÃÂ²ÃÂ¸ÃÂ·Ã‘Æ’ÃÂ°ÃÂ»ÃÂ¸ÃÂ·ÃÂ°Ã‘â€ ÃÂ¸Ã‘Â ÃÂ¿ÃÂ¾ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·ÃÂ°ÃÂ½ÃÂ¸Ã‘ÂÃÂ¼']
                 }
             else:
-                drivers_title = audience_bundle['drivers_title']
-                synopsis_title = audience_bundle['synopsis_title']
-                actions_title = audience_bundle['actions_title']
-                coordination_title = audience_bundle['coordination_title']
-                monitoring_title = audience_bundle['monitoring_title']
-                reminder_title = audience_bundle['reminder_title']
-                reminder_text = audience_bundle['reminder_text']
+                if locale_code == 'ru':
+                    drivers_title = audience_bundle.get('drivers_title', '\u041a\u041b\u042e\u0427\u0415\u0412\u042b\u0415 \u0424\u0410\u041a\u0422\u041e\u0420\u042b')
+                    synopsis_title = audience_bundle.get('synopsis_title', '\u041a\u0420\u0410\u0422\u041a\u0410\u042f \u0421\u0412\u041e\u0414\u041a\u0410')
+                    actions_title = audience_bundle.get('actions_title', '\u0420\u0415\u041a\u041e\u041c\u0415\u041d\u0414\u0423\u0415\u041c\u042b\u0415 \u041e\u0411\u0421\u041b\u0415\u0414\u041e\u0412\u0410\u041d\u0418\u042f')
+                    coordination_title = audience_bundle.get('coordination_title', '\u0412\u0417\u0410\u0418\u041c\u041e\u0414\u0415\u0419\u0421\u0422\u0412\u0418\u0415 \u0418 \u0414\u0410\u041d\u041d\u042b\u0415')
+                    monitoring_title = audience_bundle.get('monitoring_title', '\u0421\u0420\u041e\u041a\u0418 \u041d\u0410\u0411\u041b\u042e\u0414\u0415\u041d\u0418\u042f')
+                    reminder_title = audience_bundle.get('reminder_title', '\u041f\u0410\u041c\u042f\u0422\u041a\u0410')
+                    reminder_text = audience_bundle.get('reminder_text', '\u041f\u0440\u0438\u043d\u044f\u0442\u0438\u0435 \u043a\u043b\u0438\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u0440\u0435\u0448\u0435\u043d\u0438\u0439 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0437\u0430 \u0432\u0430\u0448\u0435\u0439 \u043c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u043e\u0439 \u043a\u043e\u043c\u0430\u043d\u0434\u043e\u0439.')
+                else:
+                    drivers_title = audience_bundle.get('drivers_title', 'KEY DRIVERS')
+                    synopsis_title = audience_bundle.get('synopsis_title', 'SUMMARY')
+                    actions_title = audience_bundle.get('actions_title', 'RECOMMENDED ACTIONS')
+                    coordination_title = audience_bundle.get('coordination_title', 'COORDINATION & DATA')
+                    monitoring_title = audience_bundle.get('monitoring_title', 'MONITORING WINDOWS')
+                    reminder_title = audience_bundle.get('reminder_title', 'REMINDER')
+                    reminder_text = audience_bundle.get('reminder_text', 'Clinical decisions remain with the treating physician.')
             lines = base_lines.copy()
             # Optional method summary (for scientist mode)
             method_title = audience_bundle.get('method_title')
@@ -1764,12 +1845,167 @@ def _generate_fallback_commentary(self, prediction: int, probability: float,
             lines.append(reminder_title)
             lines.append(reminder_text)
 
-        # For Russian, return text as-is to avoid any unintended re-encoding
+        # For Russian, build via a dedicated stable RU generator to avoid any encoding issues
         if locale_code == 'ru':
-            return "\n".join(lines)
+            return self._generate_ru_commentary(prediction, probability, shap_values, None, audience)
         return repair_text_encoding("\n".join(lines))
 
 
+
+
+def _generate_ru_commentary(self, prediction: int, probability: float,
+                             shap_values: List[Dict[str, Any]],
+                             patient_data: List[float] | None,
+                             audience: str) -> str:
+        risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
+        risk_label = { 'High': '\u0412\u042b\u0421\u041e\u041a\u0418\u0419',
+                       'Moderate': '\u0423\u041c\u0415\u0420\u0415\u041d\u041d\u042b\u0419',
+                       'Low': '\u041d\u0418\u0417\u041a\u0418\u0419' }.get(risk_level, '\u041d\u0418\u0417\u041a\u0418\u0419')
+        header = f"\u041a\u041b\u0418\u041d\u0418\u0427\u0415\u0421\u041a\u041e\u0415 \u0414\u041e\u0421\u042c\u0415 | {risk_label} \u0420\u0418\u0421\u041a"
+        probability_line = f"\u0412\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u044c \u0440\u0438\u0441\u043a\u0430: {probability:.1%}"
+
+        feature_labels = {
+            'WBC': '\u041b\u0435\u0439\u043a\u043e\u0446\u0438\u0442\u044b',
+            'RBC': '\u042d\u0440\u0438\u0442\u0440\u043e\u0446\u0438\u0442\u044b',
+            'PLT': '\u0422\u0440\u043e\u043c\u0431\u043e\u0446\u0438\u0442\u044b',
+            'HGB': '\u0413\u0435\u043c\u043e\u0433\u043b\u043e\u0431\u0438\u043d',
+            'HCT': '\u0413\u0435\u043c\u0430\u0442\u043e\u043a\u0440\u0438\u0442',
+            'MPV': '\u0421\u0440\u0435\u0434\u043d\u0438\u0439 \u043e\u0431\u044a\u0435\u043c \u0442\u0440\u043e\u043c\u0431\u043e\u0446\u0438\u0442\u043e\u0432',
+            'PDW': '\u0428\u0438\u0440\u0438\u043d\u0430 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u044f \u0442\u0440\u043e\u043c\u0431\u043e\u0446\u0438\u0442\u043e\u0432 (PDW)',
+            'MONO': '\u041c\u043e\u043d\u043e\u0446\u0438\u0442\u044b',
+            'BASO_ABS': '\u0411\u0430\u0437\u043e\u0444\u0438\u043b\u044b (\u0430\u0431\u0441.)',
+            'BASO_PCT': '\u0411\u0430\u0437\u043e\u0444\u0438\u043b\u044b (%)',
+            'GLUCOSE': '\u0413\u043b\u044e\u043a\u043e\u0437\u0430',
+            'ACT': '\u0410\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f \u0441\u0432\u0435\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u044f (ACT)',
+            'BILIRUBIN': '\u0411\u0438\u043b\u0438\u0440\u0443\u0431\u0438\u043d \u043e\u0431\u0449\u0438\u0439',
+        }
+        def ru_label(code: str) -> str:
+            return feature_labels.get(str(code or '').upper(), str(code or '').upper())
+        def impact_word(impact: str) -> str:
+            i = (impact or 'neutral').strip().lower()
+            if i == 'positive':
+                return '\u043f\u043e\u0432\u044b\u0448\u0430\u0435\u0442 \u0440\u0438\u0441\u043a'
+            if i == 'negative':
+                return '\u0441\u043d\u0438\u0436\u0430\u0435\u0442 \u0440\u0438\u0441\u043a'
+            return '\u043d\u0435\u0439\u0442\u0440\u0430\u043b\u044c\u043d\u044b\u0439 \u0432\u043a\u043b\u0430\u0434'
+
+        bullets = []
+        for sv in shap_values[:5]:
+            feature = ru_label(sv.get('feature', ''))
+            word = impact_word(sv.get('impact', 'neutral'))
+            try:
+                val = float(sv.get('value', 0.0))
+                val_str = f"{val:+.3f}"
+            except Exception:
+                val_str = str(sv.get('value', ''))
+            bullets.append(f"- {feature}: {word} ({val_str})")
+        while len(bullets) < 5:
+            bullets.append('- ' + '\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0444\u0430\u043a\u0442\u043e\u0440 \u0432 \u043f\u0440\u0435\u0434\u0435\u043b\u0430\u0445 \u043d\u043e\u0440\u043c\u044b')
+
+        gist_map = {
+            'High': '\u0412\u044b\u0441\u043e\u043a\u0430\u044f \u0432\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u044c. \u0422\u0440\u0435\u0431\u0443\u044e\u0442\u0441\u044f \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u0438\u0441\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f.',
+            'Moderate': '\u041f\u0440\u043e\u043c\u0435\u0436\u0443\u0442\u043e\u0447\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430. \u0422\u0440\u0435\u0431\u0443\u044e\u0442\u0441\u044f \u0434\u043e\u043f. \u0434\u0430\u043d\u043d\u044b\u0435 \u0438 \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435.',
+            'Low': '\u041d\u0438\u0437\u043a\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430. \u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u0442\u0441\u044f \u043f\u043b\u0430\u043d\u043e\u0432\u043e\u0435 \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435.'
+        }
+        steps_map = {
+            'High': ['\u041a\u0422/\u041c\u0420\u0422 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 7 \u0434\u043d\u0435\u0439',
+                     '\u042d\u0423\u0421 \u0441 \u0442\u043e\u043d\u043a\u043e\u0438\u0433\u043e\u043b\u044c\u043d\u043e\u0439 \u0430\u0441\u043f\u0438\u0440\u0430\u0446\u0438\u0435\u0439 \u043f\u0440\u0438 \u043d\u0435\u044f\u0441\u043d\u043e\u0441\u0442\u0438 \u043f\u043e \u041a\u0422/\u041c\u0420\u0422',
+                     '\u041a\u043e\u043d\u0441\u0438\u043b\u0438\u0443\u043c: \u043e\u043d\u043a\u043e\u043b\u043e\u0433/\u0445\u0438\u0440\u0443\u0440\u0433'],
+            'Moderate': ['\u041a\u0422/\u041c\u0420\u0422 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 2\u20134 \u043d\u0435\u0434\u0435\u043b\u0438',
+                         '\u0414\u0438\u043d\u0430\u043c\u0438\u043a\u0430 \u043b\u0430\u0431\u043e\u0440\u0430\u0442\u043e\u0440\u043d\u044b\u0445 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u0435\u0439/\u043e\u043d\u043a\u043e\u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432',
+                         '\u041a\u043e\u043d\u0441\u0443\u043b\u044c\u0442\u0430\u0446\u0438\u044f \u043f\u0440\u043e\u0444. \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442\u0430'],
+            'Low': ['\u041f\u043b\u0430\u043d\u043e\u0432\u043e\u0435 \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435',
+                    '\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u043f\u0440\u0438 \u043f\u043e\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u0441\u0438\u043c\u043f\u0442\u043e\u043c\u043e\u0432']
+        }
+        warnings = ['\u0416\u0435\u043b\u0442\u0443\u0448\u043d\u043e\u0441\u0442\u044c \u043a\u043e\u0436\u0438/\u0441\u043a\u043b\u0435\u0440',
+                    '\u0421\u0438\u043b\u044c\u043d\u0430\u044f \u0431\u043e\u043b\u044c \u0432 \u0436\u0438\u0432\u043e\u0442\u0435/\u0441\u043f\u0438\u043d\u0435',
+                    '\u0420\u0435\u0437\u043a\u0430\u044f \u043f\u043e\u0442\u0435\u0440\u044f \u0432\u0435\u0441\u0430',
+                    '\u0421\u0442\u043e\u0439\u043a\u0430\u044f \u0440\u0432\u043e\u0442\u0430 \u0438\u043b\u0438 \u043f\u043e\u0432\u044b\u0448\u0435\u043d\u0438\u0435 \u0441\u0430\u0445\u0430\u0440\u0430']
+        support = ['\u041f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0430 \u0441\u0435\u043c\u044c\u0438/\u0434\u0440\u0443\u0437\u0435\u0439',
+                   '\u0421\u0431\u0430\u043b\u0430\u043d\u0441\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0435 \u043f\u0438\u0442\u0430\u043d\u0438\u0435 \u0438 \u0434\u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u043e\u0435 \u043f\u0438\u0442\u044c\u0451',
+                   '\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0432\u0440\u0430\u0447\u043e\u043c \u043f\u0440\u0438 \u0443\u0445\u0443\u0434\u0448\u0435\u043d\u0438\u0438']
+
+        # Assemble structured RU analysis with clear, uppercase headings and single spacing
+        aud = (audience or 'patient').strip().lower()
+        is_doctor = aud in {'doctor', 'clinician', 'provider', 'physician', 'specialist', 'medical', 'hospital'}
+        is_scientist = aud in {'scientist', 'researcher', 'research', 'scientists'}
+
+        lines = [header, probability_line, '']
+        # Common: top drivers
+        lines.append('\u041a\u041b\u042e\u0427\u0415\u0412\u042b\u0415 \u0424\u0410\u041a\u0422\u041e\u0420\u042b')
+        lines.extend(bullets)
+
+        if is_scientist:
+            # Scientist/research variant
+            lines.extend([
+                '', '\u041a\u0420\u0410\u0422\u041a\u0410\u042f \u0421\u0412\u041e\u0414\u041a\u0410', gist_map[risk_level], '',
+                '\u041c\u0415\u0422\u041e\u0414\u0418\u041a\u0410',
+                '- SHAP: \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u0434\u0440\u0430\u0439\u0432\u0435\u0440\u044b \u0432\u043b\u0438\u044f\u043d\u0438\u044f \u043f\u043e \u043f\u0440\u0438\u0437\u043d\u0430\u043a\u0430\u043c.',
+                '- \u041d\u0435\u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0451\u043d\u043d\u043e\u0441\u0442\u044c: \u0432\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u043d\u0430\u044f \u043e\u0446\u0435\u043d\u043a\u0430, \u0437\u0430\u0432\u0438\u0441\u0438\u0442 \u043e\u0442 \u043a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u043a\u0438 \u043c\u043e\u0434\u0435\u043b\u0438.',
+                '- \u0414\u0430\u043d\u043d\u044b\u0435: \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u044b \u0438\u0441\u043a\u0430\u0436\u0435\u043d\u0438\u044f \u0438\u0437\u2011\u0437\u0430 \u0434\u0438\u0441\u0431\u0430\u043b\u0430\u043d\u0441\u0430 \u0438 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u0438\u0439 \u0432 \u0432\u044b\u0431\u043e\u0440\u043a\u0435.',
+                '', '\u041e\u0413\u0420\u0410\u041d\u0418\u0427\u0415\u041d\u0418\u042f',
+                '- \u041d\u0435 \u0437\u0430\u043c\u0435\u043d\u044f\u0435\u0442 \u043a\u043b\u0438\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u0440\u0435\u0448\u0435\u043d\u0438\u0435, \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u0438 \u0441 \u043a\u043b\u0438\u043d\u0438\u043a\u043e\u0439.',
+                '- \u0412\u043e\u0437\u043c\u043e\u0436\u043d\u0430 \u043f\u0435\u0440\u0435\u0433\u0443\u043b\u0438\u0440\u043e\u0432\u043a\u0430 \u043f\u043e \u0433\u0440\u0430\u043d\u0438\u0446\u0430\u043c \u0434\u0430\u043d\u043d\u044b\u0445.',
+            ])
+        elif is_doctor:
+            # Doctor/clinician variant
+            lines.extend([
+                '', '\u041a\u0420\u0410\u0422\u041a\u0410\u042f \u0421\u0412\u041e\u0414\u041a\u0410', gist_map[risk_level], '',
+                '\u041a\u041b\u0418\u041d\u0418\u0427\u0415\u0421\u041a\u0418\u0415 \u0414\u0415\u0419\u0421\u0422\u0412\u0418\u042f'
+            ])
+            lines.extend(f"- {s}" for s in steps_map[risk_level])
+            lines.extend([
+                '', '\u041a\u041e\u041e\u0420\u0414\u0418\u041d\u0410\u0426\u0418\u042f \u0418 \u0414\u0410\u041d\u041d\u042b\u0415',
+                '- \u0421\u043e\u0433\u043b\u0430\u0441\u0443\u0439\u0442\u0435 \u0442\u0430\u043a\u0442\u0438\u043a\u0443 \u0441 \u0441\u043c\u0435\u0436\u043d\u044b\u043c\u0438 \u0441\u043b\u0443\u0436\u0431\u0430\u043c\u0438 (\u0425\u0418/\u0413\u042d/\u041e\u041d\u041a).',
+                '- \u041e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u043b\u0430\u0431\u043e\u0440\u0430\u0442\u043e\u0440\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u0438 \u0441\u0438\u043c\u043f\u0442\u043e\u043c\u044b \u043a \u0441\u043b\u0435\u0434. \u0432\u0438\u0437\u0438\u0442\u0443.',
+                '', '\u041d\u0410\u0411\u041b\u042e\u0414\u0415\u041d\u0418\u0415'
+            ])
+            lines.extend(f"- {s}" for s in [
+                '0\u20137 \u0434\u043d\u0435\u0439: \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f/\u042d\u0423\u0421 \u043f\u043e \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u0438\u044f\u043c',
+                '1 \u043c\u0435\u0441.: \u043b\u0430\u0431\u043e\u0440\u0430\u0442\u043e\u0440\u0438\u044f + \u0441\u0438\u043c\u043f\u0442\u043e\u043c\u044b',
+                '6\u201312 \u043c\u0435\u0441.: \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u043f\u043e \u0442\u0440\u0438\u0433\u0433\u0435\u0440\u0430\u043c'
+            ])
+        else:
+            # Patient variant
+            lines.extend([
+            '', '\u041a\u0420\u0410\u0422\u041a\u0410\u042f \u0421\u0412\u041e\u0414\u041a\u0410', gist_map[risk_level], '',
+            '\u0420\u0415\u041a\u041e\u041c\u0415\u041d\u0414\u0423\u0415\u041c\u042b\u0415 \u041e\u0411\u0421\u041b\u0415\u0414\u041e\u0412\u0410\u041d\u0418\u042f'
+        ])
+            lines.extend(f"- {s}" for s in steps_map[risk_level])
+            lines.extend([
+            '', '\u041f\u0420\u0418\u0417\u041d\u0410\u041a\u0418 \u0422\u0420\u0415\u0412\u041e\u0413\u0418'
+        ])
+            lines.extend(f"- {s}" for s in [
+            '\u0416\u0435\u043b\u0442\u0443\u0448\u043d\u043e\u0441\u0442\u044c \u043a\u043e\u0436\u0438/\u0441\u043a\u043b\u0435\u0440',
+            '\u0421\u0438\u043b\u044c\u043d\u0430\u044f \u0431\u043e\u043b\u044c \u0432 \u0436\u0438\u0432\u043e\u0442\u0435/\u0441\u043f\u0438\u043d\u0435',
+            '\u0420\u0435\u0437\u043a\u0430\u044f \u043f\u043e\u0442\u0435\u0440\u044f \u0432\u0435\u0441\u0430',
+            '\u0421\u0442\u043e\u0439\u043a\u0430\u044f \u0440\u0432\u043e\u0442\u0430 \u0438\u043b\u0438 \u0432\u044b\u0441\u043e\u043a\u0430\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0430'
+        ])
+            lines.extend([
+            '', '\u041f\u041e\u0414\u0414\u0415\u0420\u0416\u041a\u0410'
+        ])
+            lines.extend(f"- {s}" for s in [
+            '\u041f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0430 \u0441\u0435\u043c\u044c\u0438/\u0434\u0440\u0443\u0437\u0435\u0439',
+            '\u0421\u0431\u0430\u043b\u0430\u043d\u0441\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0435 \u043f\u0438\u0442\u0430\u043d\u0438\u0435 \u0438 \u0434\u043e\u0441\u0442\u0430\u0442\u043e\u0447\u043d\u043e\u0435 \u043f\u0438\u0442\u044c\u0451',
+            '\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0432\u0440\u0430\u0447\u043e\u043c \u043f\u0440\u0438 \u0443\u0445\u0443\u0434\u0448\u0435\u043d\u0438\u0438'
+        ])
+            lines.extend([
+            '', '\u0412\u0417\u0410\u0418\u041c\u041e\u0414\u0415\u0419\u0421\u0422\u0412\u0418\u0415 \u0418 \u0414\u0410\u041d\u041d\u042b\u0415',
+            '- \u041f\u0435\u0440\u0435\u0434\u0430\u0447\u0430 \u0438\u0442\u043e\u0433\u043e\u0432 \u043b\u0435\u0447\u0430\u0449\u0435\u043c\u0443 \u0432\u0440\u0430\u0447\u0443',
+            '- \u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0434\u0430\u043d\u043d\u044b\u0445 \u043e\u0431\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u0439',
+            '', '\u0421\u0420\u041e\u041a\u0418 \u041d\u0410\u0411\u041b\u042e\u0414\u0415\u041d\u0418\u042f'
+        ])
+            lines.extend(f"- {s}" for s in [
+            '0\u20137 \u0434\u043d\u0435\u0439: \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f/\u0446\u0438\u0442\u043e\u043b\u043e\u0433\u0438\u044f',
+            '1 \u043c\u0435\u0441.: \u043b\u0430\u0431\u043e\u0440\u0430\u0442\u043e\u0440\u0438\u044f + \u0441\u0438\u043c\u043f\u0442\u043e\u043c\u044b',
+            '6\u201312 \u043c\u0435\u0441.: \u043d\u0430\u0431\u043b\u044e\u0434\u0435\u043d\u0438\u0435 \u043f\u043e \u043f\u043e\u0440\u043e\u0433\u0430\u043c'
+        ])
+        # Footer reminder
+        lines.extend([
+            '', '\u041f\u0410\u041c\u042f\u0422\u041a\u0410',
+            '\u041f\u0440\u0438\u043d\u044f\u0442\u0438\u0435 \u043a\u043b\u0438\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u0440\u0435\u0448\u0435\u043d\u0438\u0439 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0437\u0430 \u0432\u0430\u0448\u0435\u0439 \u043c\u0435\u0434\u0438\u0446\u0438\u043d\u0441\u043a\u043e\u0439 \u043a\u043e\u043c\u0430\u043d\u0434\u043e\u0439.'
+        ])
+        return "\n".join(lines)
 
 
 def guideline_snapshot(self) -> Dict[str, Any]:
@@ -2045,6 +2281,7 @@ MedicalDiagnosticSystem.calculate_shap_analysis = calculate_shap_analysis
 MedicalDiagnosticSystem._mock_shap_calculation = _mock_shap_calculation
 MedicalDiagnosticSystem.generate_clinical_commentary = generate_clinical_commentary
 MedicalDiagnosticSystem._generate_fallback_commentary = _generate_fallback_commentary
+MedicalDiagnosticSystem._generate_ru_commentary = _generate_ru_commentary
 MedicalDiagnosticSystem.guideline_snapshot = guideline_snapshot
 MedicalDiagnosticSystem.generate_pdf_report = generate_pdf_report
 
@@ -2263,7 +2500,9 @@ def run_diagnostic_pipeline(payload: Dict[str, Any]) -> tuple[Dict[str, Any] | N
         prediction, probability, shap_values, features, language=language, client_type=client_type
 
     )
-    ai_explanation = repair_text_encoding(ai_explanation)
+    # Avoid any re-encoding on RU text to prevent corruption
+    if not str(language).lower().startswith('ru'):
+        ai_explanation = repair_text_encoding(ai_explanation)
 
 
 
@@ -2455,7 +2694,9 @@ def regenerate_commentary():
             language=language,
             client_type=client_type
         )
-        commentary = repair_text_encoding(commentary)
+        # Preserve Cyrillic for RU without additional re-encoding
+        if not str(language).lower().startswith('ru'):
+            commentary = repair_text_encoding(commentary)
         risk_level = 'High' if probability > 0.7 else 'Moderate' if probability > 0.3 else 'Low'
         return jsonify({
             'ai_explanation': commentary,
@@ -3295,3 +3536,4 @@ try:
     del RU_FEATURE_LABELS_OLD  # type: ignore
 except Exception:
     pass
+

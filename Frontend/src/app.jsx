@@ -902,13 +902,13 @@ function DiagnosticTool({
   const isCyrillicContent = useMemo(() => {
     const s = typeof aiExplanation === 'string' ? aiExplanation : '';
     const cyrMatches = s.match(/[\u0400-\u04FF]/g) || [];
-    return cyrMatches.length >= 8; // treat as Russian text if enough Cyrillic
+    return cyrMatches.length >= 8;
   }, [aiExplanation]);
 
+  // Always attempt to parse structured analysis (supports Cyrillic headings too)
   const aiStructured = useMemo(() => {
-    if (isCyrillicContent) return null;
     return parseAiAnalysis(aiExplanation);
-  }, [aiExplanation, isCyrillicContent]);
+  }, [aiExplanation]);
 
   return (
     <div className="py-16 bg-slate-100" dir="ltr">
@@ -1075,11 +1075,7 @@ function DiagnosticTool({
                       )}
                     </div>
                   </div>
-                  {isCyrillicContent ? (
-                    <div className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                      {aiExplanation || t('ai_unavailable')}
-                    </div>
-                  ) : aiStructured ? (
+                  {aiStructured ? (
                     <div className="space-y-5">
                       <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 p-5 text-white shadow">
                         <h5 className="text-lg font-semibold">{aiStructured.header}</h5>
@@ -1280,11 +1276,11 @@ function DiagnosticTool({
                             <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-slate-500">
                               <span className="flex items-center gap-1">
                                 <span className="h-2 w-3 rounded-full bg-rose-500" />
-                                <span>Red = Danger (risk â†‘)</span>
+                                <span>Red = Danger (risk ↑)</span>
                               </span>
                               <span className="flex items-center gap-1">
                                 <span className="h-2 w-3 rounded-full bg-blue-500" />
-                                <span>Blue = Protective (risk â†“)</span>
+                                <span>Blue = Protective (risk ↓)</span>
                               </span>
                               {shapFxDisplay !== null && (
                                 <span className="text-xs text-slate-600">
