@@ -5,7 +5,13 @@ import {
   Heart, Microscope, Zap, Lock, FileText, Phone, Mail, MapPin,
   ChevronDown, ExternalLink, Star, TrendingUp, Clock, Home
 } from "lucide-react";
-import { createTranslator, SUPPORTED_LANGUAGES } from "./i18n";
+import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "./translations";
+
+// Configure frontend i18n once
+i18n.configure({
+  locales: SUPPORTED_LANGUAGES.map(l => l.value),
+  defaultLocale: 'en',
+});
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
@@ -215,6 +221,9 @@ export default function App() {
   // AI commentary language now follows page language; no separate state
   const [analysisCache, setAnalysisCache] = useState({});
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
+  const [showWaterfallHelp, setShowWaterfallHelp] = useState(false);
+  const [showBarHelp, setShowBarHelp] = useState(false);
+  const [showBeeswarmHelp, setShowBeeswarmHelp] = useState(false);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -222,6 +231,8 @@ export default function App() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('language', language);
     }
+    // keep global i18n locale in sync
+    try { i18n.setLocale(language); } catch {}
   }, [language]);
 
   // No separate analysis language; commentary follows page language
@@ -841,9 +852,13 @@ function DiagnosticTool({
     }, 0);
     return maxAbs > 0 ? maxAbs : 1;
   }, [shapSummary]);
+  const shapAbsSum = useMemo(() => {
+    if (!shapSummary.length) return 1;
+    const s = shapSummary.reduce((sum, e) => sum + Math.abs(e.value), 0);
+    return s > 0 ? s : 1;
+  }, [shapSummary]);
   const beeswarmPoints = useMemo(() => {
     if (!shapSummary.length) return [];
-
     const range = shapMaxAbs || 1;
     const minGap = 6;
     const offsetStep = 14;
@@ -1311,6 +1326,7 @@ function DiagnosticTool({
                             })}
                           </div>
                           {graphVisibility.waterfall && (
+                            <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
                               <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
                                 <span className="text-right">Feature Impact</span>
@@ -1369,8 +1385,76 @@ function DiagnosticTool({
                                 );
                               })}
                             </div>
+                            <div className="mt-3 rounded-xl bg-blue-50 border border-blue-100 p-3">
+                              <div className="text-xs font-semibold text-blue-700 mb-1">{t('chart_ai_heading')}</div>
+                              <p className="text-sm text-blue-900">
+                                {(() => {
+                                  const fx = shapFxDisplay;
+                                  const baseline = shapWaterfall?.baseline ?? null;
+                                  const pos = [...shapSummary].filter(e => e.value >= 0).sort((a,b)=>b.value-a.value)[0];
+                                  const neg = [...shapSummary].filter(e => e.value < 0).sort((a,b)=>a.value-b.value)[0];
+                                  const tpl = t('chart_waterfall_text');
+                                  const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
+                                  return tpl
+                                    .replace('{baseline}', safe(baseline))
+                                    .replace('{fx}', safe(fx))
+                                    .replace('{topPos}', pos?.feature?.toUpperCase?.() || t('na'))
+                                    .replace('{topPosVal}', safe(pos?.value))
+                                    .replace('{topNeg}', neg?.feature?.toUpperCase?.() || t('na'))
+                                    .replace('{topNegVal}', safe(neg?.value));
+                                })()}
+                              </p>
+                              <p className="mt-1 text-sm text-blue-900">
+                                {(() => {
+                                  const fx = shapFxDisplay;
+                                  const baseline = shapWaterfall?.baseline ?? null;
+                                  const delta = (typeof fx === 'number' && typeof baseline === 'number') ? (fx - baseline) : null;
+                                  const posCount = shapSummary.filter(e => e.value >= 0).length;
+                                  const negCount = shapSummary.filter(e => e.value < 0).length;
+                                  const tpl = t('chart_waterfall_text2');
+                                  const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
+                                  return tpl
+                                    .replace('{delta}', safe(delta))
+                                    .replace('{posCount}', String(posCount))
+                                    .replace('{negCount}', String(negCount));
+                                })()}
+                              </p>
+                              <div className="mt-2 flex items-center gap-3">
+                                <button type="button" onClick={() => setShowWaterfallHelp(v => !v)} className="text-xs font-semibold text-blue-700 hover:underline">
+                                  {showWaterfallHelp ? t('chart_toggle_less') : t('chart_toggle_more')}
+                                </button>
+                              </div>
+                              {showWaterfallHelp && (
+                                <div className="mt-2 rounded-lg bg-white/70 border border-blue-100 p-3 text-sm text-slate-700">
+                                  <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
+                                  <p className="mb-2">{t('chart_waterfall_read')}</p>
+                                  <div className="grid gap-1">
+                                    <div className="font-semibold text-blue-800">{t('chart_contrib_up')}</div>
+                                    {(() => {
+                                      const pos = [...shapSummary].filter(e => e.value >= 0).sort((a,b)=>b.value-a.value).slice(0,2);
+                                      const fmt = (e) => t('chart_feature_item')
+                                        .replace('{feature}', (e?.feature||t('na')).toUpperCase())
+                                        .replace('{value}', (typeof e?.value==='number'? e.value.toFixed(3): '—'))
+                                        .replace('{percent}', Math.round(Math.abs(e?.value||0)/shapAbsSum*100));
+                                      return pos.map((e,i)=>(<div key={`wf-pos-${i}`}>• {fmt(e)}</div>));
+                                    })()}
+                                    <div className="mt-2 font-semibold text-blue-800">{t('chart_contrib_down')}</div>
+                                    {(() => {
+                                      const neg = [...shapSummary].filter(e => e.value < 0).sort((a,b)=>a.value-b.value).slice(0,2);
+                                      const fmt = (e) => t('chart_feature_item')
+                                        .replace('{feature}', (e?.feature||t('na')).toUpperCase())
+                                        .replace('{value}', (typeof e?.value==='number'? e.value.toFixed(3): '—'))
+                                        .replace('{percent}', Math.round(Math.abs(e?.value||0)/shapAbsSum*100));
+                                      return neg.map((e,i)=>(<div key={`wf-neg-${i}`}>• {fmt(e)}</div>));
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            </>
                           )}
                           {graphVisibility.bar && (
+                            <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <h5 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -1406,8 +1490,53 @@ function DiagnosticTool({
                                 })}
                               </div>
                             </div>
+                            <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 p-3">
+                              <div className="text-xs font-semibold text-indigo-700 mb-1">{t('chart_ai_heading')}</div>
+                              <p className="text-sm text-indigo-900">
+                                {(() => {
+                                  const sorted = [...shapSummary].sort((a,b)=>Math.abs(b.value)-Math.abs(a.value));
+                                  const [a,b,c] = [sorted[0], sorted[1], sorted[2]];
+                                  const tpl = t('chart_bar_text');
+                                  const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
+                                  const fmt = (e) => e?.feature?.toUpperCase?.() || t('na');
+                                  return tpl
+                                    .replace('{t1}', fmt(a)).replace('{t1v}', safe(a?.value))
+                                    .replace('{t2}', fmt(b)).replace('{t2v}', safe(b?.value))
+                                    .replace('{t3}', fmt(c)).replace('{t3v}', safe(c?.value));
+                                })()}
+                              </p>
+                            </div>
+                            <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 p-3">
+                              <div className="text-xs font-semibold text-indigo-700 mb-1">{t('chart_ai_heading')}</div>
+                              <p className="text-sm text-indigo-900">
+                                {(() => {
+                                  const sorted = [...shapSummary].sort((a,b)=>Math.abs(b.value)-Math.abs(a.value));
+                                  const [a,b,c] = [sorted[0], sorted[1], sorted[2]];
+                                  const tpl = t('chart_bar_text');
+                                  const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
+                                  const fmt = (e) => e?.feature?.toUpperCase?.() || t('na');
+                                  return tpl
+                                    .replace('{t1}', fmt(a)).replace('{t1v}', safe(a?.value))
+                                    .replace('{t2}', fmt(b)).replace('{t2v}', safe(b?.value))
+                                    .replace('{t3}', fmt(c)).replace('{t3v}', safe(c?.value));
+                                })()}
+                              </p>
+                              <div className="mt-2">
+                                <button type="button" onClick={() => setShowBarHelp(v => !v)} className="text-xs font-semibold text-indigo-700 hover:underline">
+                                  {showBarHelp ? t('chart_toggle_less') : t('chart_toggle_more')}
+                                </button>
+                                {showBarHelp && (
+                                  <div className="mt-2 rounded-lg bg-white/70 border border-indigo-100 p-3 text-sm text-slate-700">
+                                    <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
+                                    <p>{t('chart_bar_read')}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            </>
                           )}
                           {graphVisibility.beeswarm && beeswarmPoints.length > 0 && (
+                            <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <h5 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -1450,7 +1579,46 @@ function DiagnosticTool({
                                   );
                                 })}
                               </div>
-                            </div>
+                              </div>
+                              <div className="mt-3 rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                                <div className="text-xs font-semibold text-emerald-700 mb-1">{t('chart_ai_heading')}</div>
+                                <p className="text-sm text-emerald-900">
+                                  {(() => {
+                                    const topAbs = shapSummary[0];
+                                    const tpl = t('chart_beeswarm_text');
+                                    const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
+                                    return tpl
+                                      .replace('{topAbs}', topAbs?.feature?.toUpperCase?.() || t('na'))
+                                      .replace('{topAbsVal}', safe(topAbs?.value));
+                                  })()}
+                                </p>
+                                <p className="mt-1 text-sm text-emerald-900">
+                                  {(() => {
+                                    const rightCount = shapSummary.filter(e => e.value > 0).length;
+                                    const leftCount = shapSummary.filter(e => e.value < 0).length;
+                                    const tpl = t('chart_beeswarm_text2');
+                                    return tpl
+                                      .replace('{rightCount}', String(rightCount))
+                                      .replace('{leftCount}', String(leftCount));
+                                  })()}
+                                </p>
+                                <div className="mt-2">
+                                  <button type="button" onClick={() => setShowBeeswarmHelp(v => !v)} className="text-xs font-semibold text-emerald-700 hover:underline">
+                                    {showBeeswarmHelp ? t('chart_toggle_less') : t('chart_toggle_more')}
+                                  </button>
+                                  {showBeeswarmHelp && (
+                                    <div className="mt-2 rounded-lg bg-white/70 border border-emerald-100 p-3 text-sm text-slate-700">
+                                      <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
+                                      <p className="mb-2">{t('chart_beeswarm_read')}</p>
+                                      <p>{t('chart_beeswarm_text2')
+                                        .replace('{rightCount}', String(shapSummary.filter(e=>e.value>0).length))
+                                        .replace('{leftCount}', String(shapSummary.filter(e=>e.value<0).length))}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              </>
                           )}
                           <div className="flex flex-col items-center gap-1 text-[11px] font-medium text-slate-500">
                             <p>

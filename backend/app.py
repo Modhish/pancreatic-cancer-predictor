@@ -603,7 +603,7 @@ COMMENTARY_LOCALE = {
                     'Register case in eligible research registry and align with IRB/ethics requirements.'
                 ],
                 'Moderate': [
-                    'Schedule pancreatic-focused CT/MRI within 2Ã¢â‚¬â€œ4 weeks depending on symptom trajectory.',
+                    'Schedule pancreatic-focused CT/MRI within 2–4 weeks depending on symptom trajectory.',
                     'Trend biomarkers and glycemic status; repeat sooner if anomalies evolve.',
                     'Document potential confounders (infection, cholestasis, hemolysis) and harmonize lab platforms.'
                 ],
