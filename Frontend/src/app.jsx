@@ -15,7 +15,7 @@ i18n.configure({
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
-// Client-side medical reference ranges (mirror backend)
+// Client-side medical reference ranges (mirror backend )}
 const RANGES = {
   wbc: [4.0, 11.0],
   rbc: [4.0, 5.5],
@@ -71,11 +71,11 @@ const GUIDELINE_LINKS = [
   },
 ];
 
-// Heuristic fix for mojibake (UTF-8 read as Latin-1 and re-encoded)
+// Heuristic fix for mojibake (UTF-8 read as Latin-1 and re-encoded )}
 const fixMojibake = (s) => {
   try {
-    // Detect common mojibake markers for Cyrillic (Ã, Ã‘ sequences)
-    if (!/[ÃÃ‘][\u0080-\u00BF]/.test(s)) return s;
+    // Detect common mojibake markers for Cyrillic (ÃƒÆ’Ã‚Â, ÃƒÆ’Ã¢â‚¬Ëœ sequences )}
+    if (!/[ÃƒÆ’Ã‚ÂÃƒÆ’Ã¢â‚¬Ëœ][\u0080-\u00BF]/.test(s)) return s;
     // Convert each code unit to a byte and reinterpret as UTF-8
     const bytes = new Uint8Array([...s].map((ch) => ch.charCodeAt(0) & 0xff));
     const decoded = new TextDecoder('utf-8').decode(bytes);
@@ -372,7 +372,7 @@ export default function App() {
   const baseAiExplanation = result?.ai_explanation || result?.aiExplanation || "";
   const activeAiExplanation = analysisCache[`${language}:${clientType}`] ?? baseAiExplanation;
 
-  // Regenerate commentary when audience changes (if we already have a result)
+  // Regenerate commentary when audience changes (if we already have a result )}
   useEffect(() => {
     const regenerateForAudience = async () => {
       if (!result) return;
@@ -487,7 +487,9 @@ export default function App() {
       
       {/* Main Content */}
       <main>
-        {renderSection()}
+        <ErrorBoundary>
+          {renderSection()}
+        </ErrorBoundary>
       </main>
 
       {/* Footer */}
@@ -543,7 +545,7 @@ function Navigation({
                 <item.icon className="h-4 w-4" />
                 <span>{item.label}</span>
               </button>
-            ))}
+          ))}
 
           </div>
 
@@ -626,7 +628,7 @@ function Navigation({
               </div>
             </div>
           </div>
-        )}
+                      )}
       </div>
     </nav>
   );
@@ -757,6 +759,9 @@ function DiagnosticTool({
   t,
 }) {
   const [showGraphs, setShowGraphs] = useState(true);
+  const [showWaterfallHelp, setShowWaterfallHelp] = useState(false);
+  const [showBarHelp, setShowBarHelp] = useState(false);
+  const [showBeeswarmHelp, setShowBeeswarmHelp] = useState(false);
   const [graphVisibility, setGraphVisibility] = useState({
     waterfall: true,
     bar: true,
@@ -791,8 +796,8 @@ function DiagnosticTool({
         };
       })
       .filter((entry) => Number.isFinite(entry.value))
-        .sort((a, b) => b.importance - a.importance)
-        .slice(0, 8);
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, 8);
   }, [result]);
 
   const shapBaseline = useMemo(() => {
@@ -811,7 +816,7 @@ function DiagnosticTool({
     let baseline = shapBaseline;
 
     if (baseline === null) {
-      const fx = typeof result?.probability === 'number' && Number.isFinite(result.probability)
+      const fx = (typeof result?.probability === 'number' && Number.isFinite(result.probability))
         ? result.probability
         : null;
       baseline = fx !== null ? fx - totalContribution : 0;
@@ -904,7 +909,7 @@ function DiagnosticTool({
   }, [shapSummary, shapMaxAbs]);
   const shapRange = shapWaterfall ? Math.max(shapWaterfall.max - shapWaterfall.min, 1e-6) : 1;
   const shapFxDisplay =
-    typeof result?.probability === 'number' && Number.isFinite(result.probability)
+    (typeof result?.probability === 'number' && Number.isFinite(result.probability))
       ? result.probability
       : shapWaterfall?.finalValue ?? null;
   const shapPercent = (value) => {
@@ -920,7 +925,7 @@ function DiagnosticTool({
     return cyrMatches.length >= 8;
   }, [aiExplanation]);
 
-  // Always attempt to parse structured analysis (supports Cyrillic headings too)
+  // Always attempt to parse structured analysis (supports Cyrillic headings too )}
   const aiStructured = useMemo(() => {
     return parseAiAnalysis(aiExplanation);
   }, [aiExplanation]);
@@ -1022,7 +1027,7 @@ function DiagnosticTool({
                       <Stethoscope className="h-4 w-4 mr-2" />
                       {t('analyze')}
                     </>
-                  )}
+                    )}
                 </button>
                 <button
                   onClick={handleClear}
@@ -1075,10 +1080,10 @@ function DiagnosticTool({
                 <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-600">
                   {err}
                 </div>
-              )}
+                    )}
 
               {result && (
-                <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3 mt-6">
+                  <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-3 mt-6">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h4 className="text-lg font-semibold text-slate-900">{t('ai_title')}</h4>
@@ -1087,7 +1092,7 @@ function DiagnosticTool({
                     <div className="flex items-center gap-2">
                       {analysisRefreshing && (
                         <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                      )}
+                    )}
                     </div>
                   </div>
                   {aiStructured ? (
@@ -1099,7 +1104,7 @@ function DiagnosticTool({
                         )}
                       </div>
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                        {aiStructured.sections.map((section) => (
+                        {(Array.isArray(aiStructured.sections) ? aiStructured.sections : []).map((section) => (
                           <div
                             key={section.title}
                             className="rounded-2xl border border-slate-100 bg-white/95 p-5 shadow-sm transition hover:shadow-md"
@@ -1108,10 +1113,10 @@ function DiagnosticTool({
                               {section.title}
                             </h6>
                             <div className="mt-3 space-y-3 text-sm text-slate-600">
-                              {section.paragraphs.map((paragraph, idx) => (
+                              {(Array.isArray(section.paragraphs) ? section.paragraphs : []).map((paragraph, idx) => (
                                 <p key={`paragraph-${section.title}-${idx}`}>{paragraph}</p>
                               ))}
-                              {section.bullets.length > 0 && (
+                              {(Array.isArray(section.bullets) && section.bullets.length > 0) && (
                                 <ul className="space-y-2">
                                   {section.bullets.map((item, idx) => (
                                     <li key={`bullet-${section.title}-${idx}`} className="flex items-start gap-2">
@@ -1159,9 +1164,9 @@ function DiagnosticTool({
                         }
                       })()}
                     </div>
-                  )}
+                    )}
                 </div>
-              )}
+                    )}
             </div>
 
             <div className="space-y-6 xl:sticky xl:top-6 lg:col-span-1 xl:col-span-2">
@@ -1172,7 +1177,7 @@ function DiagnosticTool({
                     {t('empty_prompt')}
                   </p>
                 </div>
-              )}
+                    )}
 
               {result ? (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1247,10 +1252,9 @@ function DiagnosticTool({
                     ))}
                   </div>
                 </div>
-              )}
+                    )}
 
-              {result && (
-                <>
+              {result && (<>
                   <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-2">
                     <h4 className="text-lg font-semibold text-slate-900">{t('risk_summary_title')}</h4>
                     <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -1289,14 +1293,6 @@ function DiagnosticTool({
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <h5 className="flex items-center gap-2 text-sm font-semibold text-blue-700">{t('shap_title')}</h5>
                             <div className="flex flex-wrap items-center gap-4 text-[11px] font-medium text-slate-500">
-                              <span className="flex items-center gap-1">
-                                <span className="h-2 w-3 rounded-full bg-rose-500" />
-                                <span>Red = Danger (risk ↑)</span>
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="h-2 w-3 rounded-full bg-blue-500" />
-                                <span>Blue = Protective (risk ↓)</span>
-                              </span>
                               {shapFxDisplay !== null && (
                                 <span className="text-xs text-slate-600">
                                   f(x) = <span className="font-semibold text-slate-800">{shapFxDisplay.toFixed(3)}</span>
@@ -1325,7 +1321,7 @@ function DiagnosticTool({
                               );
                             })}
                           </div>
-                          {graphVisibility.waterfall && (
+                          {graphVisibility.waterfall && shapWaterfall && (
                             <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
                               <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
@@ -1428,32 +1424,38 @@ function DiagnosticTool({
                                 <div className="mt-2 rounded-lg bg-white/70 border border-blue-100 p-3 text-sm text-slate-700">
                                   <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
                                   <p className="mb-2">{t('chart_waterfall_read')}</p>
-                                  <div className="grid gap-1">
-                                    <div className="font-semibold text-blue-800">{t('chart_contrib_up')}</div>
-                                    {(() => {
-                                      const pos = [...shapSummary].filter(e => e.value >= 0).sort((a,b)=>b.value-a.value).slice(0,2);
-                                      const fmt = (e) => t('chart_feature_item')
-                                        .replace('{feature}', (e?.feature||t('na')).toUpperCase())
-                                        .replace('{value}', (typeof e?.value==='number'? e.value.toFixed(3): '—'))
-                                        .replace('{percent}', Math.round(Math.abs(e?.value||0)/shapAbsSum*100));
-                                      return pos.map((e,i)=>(<div key={`wf-pos-${i}`}>• {fmt(e)}</div>));
-                                    })()}
-                                    <div className="mt-2 font-semibold text-blue-800">{t('chart_contrib_down')}</div>
-                                    {(() => {
-                                      const neg = [...shapSummary].filter(e => e.value < 0).sort((a,b)=>a.value-b.value).slice(0,2);
-                                      const fmt = (e) => t('chart_feature_item')
-                                        .replace('{feature}', (e?.feature||t('na')).toUpperCase())
-                                        .replace('{value}', (typeof e?.value==='number'? e.value.toFixed(3): '—'))
-                                        .replace('{percent}', Math.round(Math.abs(e?.value||0)/shapAbsSum*100));
-                                      return neg.map((e,i)=>(<div key={`wf-neg-${i}`}>• {fmt(e)}</div>));
-                                    })()}
-                                  </div>
                                 </div>
                               )}
+                              <div className="grid gap-1">
+                                <div className="font-semibold text-blue-800">{t('chart_contrib_up')}</div>
+                                {(() => {
+                                  const pos = [...shapSummary]
+                                    .filter(e => e.value >= 0)
+                                    .sort((a,b)=>b.value - a.value)
+                                    .slice(0,2);
+                                  const fmt = (e) => t('chart_feature_item')
+                                    .replace('{feature}', (e?.feature || t('na')).toUpperCase())
+                                    .replace('{value}', (typeof e?.value === 'number' ? e.value.toFixed(3) : '-'))
+                                    .replace('{percent}', Math.round(Math.abs(e?.value || 0) / shapAbsSum * 100));
+                                  return pos.map((e,i)=>(<div key={`wf-pos-${i}`}>- {fmt(e)}</div>));
+                                })()}
+                                <div className="mt-2 font-semibold text-blue-800">{t('chart_contrib_down')}</div>
+                                {(() => {
+                                  const neg = [...shapSummary]
+                                    .filter(e => e.value < 0)
+                                    .sort((a,b)=>a.value - b.value)
+                                    .slice(0,2);
+                                  const fmt = (e) => t('chart_feature_item')
+                                    .replace('{feature}', (e?.feature || t('na')).toUpperCase())
+                                    .replace('{value}', (typeof e?.value === 'number' ? e.value.toFixed(3) : '-'))
+                                    .replace('{percent}', Math.round(Math.abs(e?.value || 0) / shapAbsSum * 100));
+                                  return neg.map((e,i)=>(<div key={`wf-neg-${i}`}>- {fmt(e)}</div>));
+                                })()}
+                              </div>
                             </div>
-                            </>
-                          )}
-                          {graphVisibility.bar && (
+                          </>
+                        )}
+                          {graphVisibility.bar && shapSummary.length > 0 && (
                             <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1505,22 +1507,6 @@ function DiagnosticTool({
                                     .replace('{t3}', fmt(c)).replace('{t3v}', safe(c?.value));
                                 })()}
                               </p>
-                            </div>
-                            <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 p-3">
-                              <div className="text-xs font-semibold text-indigo-700 mb-1">{t('chart_ai_heading')}</div>
-                              <p className="text-sm text-indigo-900">
-                                {(() => {
-                                  const sorted = [...shapSummary].sort((a,b)=>Math.abs(b.value)-Math.abs(a.value));
-                                  const [a,b,c] = [sorted[0], sorted[1], sorted[2]];
-                                  const tpl = t('chart_bar_text');
-                                  const safe = (v) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(3) : '—');
-                                  const fmt = (e) => e?.feature?.toUpperCase?.() || t('na');
-                                  return tpl
-                                    .replace('{t1}', fmt(a)).replace('{t1v}', safe(a?.value))
-                                    .replace('{t2}', fmt(b)).replace('{t2v}', safe(b?.value))
-                                    .replace('{t3}', fmt(c)).replace('{t3v}', safe(c?.value));
-                                })()}
-                              </p>
                               <div className="mt-2">
                                 <button type="button" onClick={() => setShowBarHelp(v => !v)} className="text-xs font-semibold text-indigo-700 hover:underline">
                                   {showBarHelp ? t('chart_toggle_less') : t('chart_toggle_more')}
@@ -1530,11 +1516,10 @@ function DiagnosticTool({
                                     <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
                                     <p>{t('chart_bar_read')}</p>
                                   </div>
-                                )}
+                    )}
                               </div>
                             </div>
-                            </>
-                          )}
+                            </>)}
                           {graphVisibility.beeswarm && beeswarmPoints.length > 0 && (
                             <>
                             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm space-y-3">
@@ -1610,30 +1595,42 @@ function DiagnosticTool({
                                     <div className="mt-2 rounded-lg bg-white/70 border border-emerald-100 p-3 text-sm text-slate-700">
                                       <div className="font-semibold mb-1">{t('chart_how_to_read')}</div>
                                       <p className="mb-2">{t('chart_beeswarm_read')}</p>
-                                      <p>{t('chart_beeswarm_text2')
-                                        .replace('{rightCount}', String(shapSummary.filter(e=>e.value>0).length))
-                                        .replace('{leftCount}', String(shapSummary.filter(e=>e.value<0).length))}
+                                      <p>
+                                        {(() => {
+                                          const rightCount = shapSummary.filter(e => e.value > 0).length;
+                                          const leftCount = shapSummary.filter(e => e.value < 0).length;
+                                          return t('chart_beeswarm_text2')
+                                            .replace('{rightCount}', String(rightCount))
+                                            .replace('{leftCount}', String(leftCount));
+                                        })()}
                                       </p>
                                     </div>
-                                  )}
+                    )}
                                 </div>
                               </div>
-                              </>
-                          )}
+                            </>)}
                           <div className="flex flex-col items-center gap-1 text-[11px] font-medium text-slate-500">
-                            <p>
-                              Model baseline E[f(X)] = {(shapBaseline ?? shapWaterfall.baseline).toFixed(3)}
-                            </p>
-                            {shapFxDisplay !== null && (
+                            {(() => {
+                              const baseVal = (typeof shapBaseline === 'number' && Number.isFinite(shapBaseline)
+                                ? shapBaseline
+                                : (typeof (shapWaterfall?.baseline) === 'number' && Number.isFinite(shapWaterfall?.baseline)
+                                  ? shapWaterfall?.baseline
+                                  : null));
+                              return (
+                                <p>
+                                  Model baseline E[f(X)] = {baseVal !== null ? baseVal.toFixed(3) : t('na')}
+                                </p>
+                              );
+                            })()}
+                            {shapFxDisplay !== null && Number.isFinite(shapFxDisplay) && (
                               <p>
                                 Patient prediction f(x) = {shapFxDisplay.toFixed(3)}
-                              </p>
-                            )}
+                              </p> )}
                           </div>
                         </div>
                       ) : (
                         <p className="text-xs text-blue-600">{t('shap_unavailable')}</p>
-                      )
+                    )
                     ) : (
                       <p className="text-xs text-blue-600">{t('graphs_hidden_hint')}</p>
                     )}
@@ -1688,7 +1685,7 @@ function DiagnosticTool({
                     )}
                   </button>
                 </>
-              )}
+                    )}
             </div>
           </div>
         </div>
@@ -1857,6 +1854,35 @@ function Footer({ onNavigate, t }) {
     </footer>
   );
 }
+
+
+
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    // eslint-disable-next-line no-console
+    console.error('Render error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-rose-700">
+          <div className="font-semibold mb-1">Something went wrong while rendering the results.</div>
+          <div className="text-xs opacity-80">{String(this.state.error?.message || this.state.error || '')}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 
 
