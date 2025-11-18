@@ -27,6 +27,7 @@
   "graph_waterfall": "Waterfall",
   "graph_bar": "Bar Plot",
   "graph_beeswarm": "Beeswarm",
+  "graph_line": "Line Chart",
   "result_low": "Low Risk Assessment",
   "result_high": "High Risk - Further Evaluation Recommended",
   "risk_score": "Risk Score",

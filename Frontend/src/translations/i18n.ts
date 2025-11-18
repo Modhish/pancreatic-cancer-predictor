@@ -1,4 +1,4 @@
-// Frontend-safe i18n with a Node-i18n-like configure API
+﻿// Frontend-safe i18n with a Node-i18n-like configure API
 // Loads JSON resources and exposes t/__/configure/setLocale/getLocale
 
 import en from "./en.json";
@@ -119,3 +119,4 @@ export function t(key: TranslationKey): string {
 }
 
 export default i18n;
+

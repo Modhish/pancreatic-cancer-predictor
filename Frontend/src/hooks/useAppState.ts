@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "../translations";
 import { RANGES } from "../constants/ranges";
+import { fixMojibake } from "../utils/aiAnalysis";
 
 // Configure frontend i18n once at module load
 i18n.configure({
@@ -9,6 +10,60 @@ i18n.configure({
 });
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+
+type AiPayload = Partial<Record<string, unknown>> | null | undefined;
+
+type Base64Buffer = {
+  from: (
+    input: string,
+    encoding: string,
+  ) => {
+    toString: (encoding: string) => string;
+  };
+};
+
+const decodeBase64Utf8 = (value?: string | null): string | null => {
+  if (!value) return null;
+  try {
+    let binary: string | null = null;
+    if (typeof atob === "function") {
+      binary = atob(value);
+    } else if (typeof globalThis !== "undefined") {
+      const bufferCtor = (globalThis as { Buffer?: Base64Buffer }).Buffer;
+      if (bufferCtor) {
+        binary = bufferCtor.from(value, "base64").toString("binary");
+      }
+    }
+    if (!binary) return null;
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+    let encoded = "";
+    bytes.forEach((byte) => {
+      encoded += `%${byte.toString(16).padStart(2, "0")}`;
+    });
+    return decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+};
+
+const getAiExplanationFromPayload = (payload: AiPayload): string => {
+  if (!payload) return "";
+  const b64 =
+    (payload.ai_explanation_b64 as string | undefined) ??
+    (payload.aiExplanationB64 as string | undefined);
+  const decoded = decodeBase64Utf8(b64);
+  if (decoded && decoded.trim()) {
+    return fixMojibake(decoded);
+  }
+  const fallback =
+    (payload.ai_explanation as string | undefined) ??
+    (payload.aiExplanation as string | undefined) ??
+    "";
+  return fixMojibake(fallback);
+};
 
 const defaultForm = {
   wbc: "5.8",
@@ -34,6 +89,8 @@ export interface AppResult {
   risk_level?: string;
   ai_explanation?: string;
   aiExplanation?: string;
+  ai_explanation_b64?: string;
+  aiExplanationB64?: string;
   shap_values?: any[];
   shapValues?: any[];
   patient_values?: Record<string, number | string>;
@@ -161,7 +218,7 @@ export default function useAppState(): UseAppState {
         throw new Error(msg);
       }
       const data = await res.json();
-      const aiExplanation = data.ai_explanation || data.aiExplanation || "";
+      const aiExplanation = getAiExplanationFromPayload(data);
       setResult({ ...data, ai_explanation: aiExplanation });
       const cacheKey = `${language}:${clientType}`;
       setAnalysisCache({ [cacheKey]: aiExplanation });
@@ -246,8 +303,7 @@ export default function useAppState(): UseAppState {
     setAnalysisCache({});
   };
 
-  const baseAiExplanation =
-    result?.ai_explanation || result?.aiExplanation || "";
+  const baseAiExplanation = getAiExplanationFromPayload(result);
   const activeAiExplanation =
     analysisCache[`${language}:${clientType}`] ?? baseAiExplanation;
 
@@ -297,7 +353,7 @@ export default function useAppState(): UseAppState {
           throw new Error(msg);
         }
         const data = await response.json();
-        const newText = data.ai_explanation || data.aiExplanation || "";
+        const newText = getAiExplanationFromPayload(data);
         setAnalysisCache((prev) => ({ ...prev, [key]: newText }));
         setResult((prev) =>
           prev
