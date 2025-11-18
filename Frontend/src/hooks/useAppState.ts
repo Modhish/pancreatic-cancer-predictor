@@ -1,0 +1,351 @@
+import { useEffect, useMemo, useState } from "react";
+import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "../translations";
+import { RANGES } from "../constants/ranges";
+
+// Configure frontend i18n once at module load
+i18n.configure({
+  locales: SUPPORTED_LANGUAGES.map((l) => l.value),
+  defaultLocale: "en",
+});
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+
+const defaultForm = {
+  wbc: "5.8",
+  rbc: "4.5",
+  plt: "220",
+  hgb: "135",
+  hct: "42",
+  mpv: "9.5",
+  pdw: "14",
+  mono: "0.5",
+  baso_abs: "0.03",
+  baso_pct: "0.8",
+  glucose: "5.2",
+  act: "28",
+  bilirubin: "12",
+} as const;
+
+export type FormState = typeof defaultForm;
+export type FormKey = keyof FormState;
+
+export interface AppResult {
+  probability?: number;
+  risk_level?: string;
+  ai_explanation?: string;
+  aiExplanation?: string;
+  shap_values?: any[];
+  shapValues?: any[];
+  patient_values?: Record<string, number | string>;
+  [key: string]: unknown;
+}
+
+export interface UseAppState {
+  currentSection: string;
+  setCurrentSection: (section: string) => void;
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  result: AppResult | null;
+  loading: boolean;
+  downloading: boolean;
+  err: string;
+  mobileMenuOpen: boolean;
+  setMobileMenuOpen: (open: boolean) => void;
+  clientType: string;
+  setClientType: (type: string) => void;
+  language: string;
+  setLanguage: (lang: string) => void;
+  analysisRefreshing: boolean;
+  t: (key: string) => string;
+  validate: { ok: boolean; message: string };
+  activeAiExplanation: string;
+  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSubmit: () => Promise<void>;
+  handleDownload: () => Promise<void>;
+  handleClear: () => void;
+}
+
+export default function useAppState(): UseAppState {
+  const [currentSection, setCurrentSection] = useState<string>("home");
+  const [form, setForm] =
+    useState<FormState>(defaultForm);
+  const [result, setResult] = useState<AppResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [err, setErr] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [clientType, setClientType] = useState("patient");
+  const [language, setLanguage] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("language");
+      return saved === "ru" ? "ru" : "en";
+    }
+    return "en";
+  });
+  const [analysisCache, setAnalysisCache] = useState<
+    Record<string, string>
+  >({});
+  const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
+
+  const t = useMemo(() => createTranslator(language), [language]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("language", language);
+    }
+    try {
+      i18n.setLocale(language);
+    } catch {
+      // ignore
+    }
+  }, [language]);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const { name, value } = e.target;
+    setForm((s) => ({ ...s, [name]: value }));
+  };
+
+  const validate = useMemo(() => {
+    const fields = Object.entries(form) as [FormKey, string][];
+    const errors: string[] = [];
+    for (const [key, val] of fields) {
+      if (val === "" || Number.isNaN(Number(val))) {
+        errors.push(`${key.toUpperCase()}: invalid number`);
+        continue;
+      }
+      const num = Number(val);
+      const range = RANGES[key as keyof typeof RANGES];
+      if (range && (num < range[0] || num > range[1])) {
+        errors.push(
+          `${key.toUpperCase()}: ${num} outside normal range (${range[0]}-${range[1]})`,
+        );
+      }
+    }
+    return {
+      ok: errors.length === 0,
+      message: errors.join("; "),
+    };
+  }, [form]);
+
+  const handleSubmit = async () => {
+    setErr("");
+    if (!validate.ok) {
+      setErr(validate.message);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          client_type: clientType,
+          language,
+        }),
+      });
+      if (!res.ok) {
+        let msg = `${res.status} ${res.statusText}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.validation_errors) {
+            msg = errJson.validation_errors.join("; ");
+          } else if (errJson?.error) {
+            msg = errJson.error;
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      const aiExplanation = data.ai_explanation || data.aiExplanation || "";
+      setResult({ ...data, ai_explanation: aiExplanation });
+      const cacheKey = `${language}:${clientType}`;
+      setAnalysisCache({ [cacheKey]: aiExplanation });
+    } catch (e) {
+      setErr(
+        `Failed to reach the server. Make sure Flask is running on ${API_BASE} (error: ${e.message})`,
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!result) {
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const patientPayload = result.patient_values
+        ? { ...result.patient_values }
+        : { ...form };
+      const shapPayload = result.shap_values || result.shapValues || [];
+      const aiExplanation = activeAiExplanation;
+
+      const response = await fetch(`${API_BASE}/api/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient: patientPayload,
+          result: {
+            ...result,
+            shap_values: shapPayload,
+            ai_explanation: aiExplanation,
+            language,
+          },
+          language,
+        }),
+      });
+
+      if (!response.ok) {
+        let message = `${response.status} ${response.statusText}`;
+        try {
+          const errJson = await response.json();
+          if (errJson?.validation_errors) {
+            message = errJson.validation_errors.join("; ");
+          } else if (errJson?.error) {
+            message = errJson.error;
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      link.download = `diagnoai-pancreas-report-${timestamp}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setErr(`Failed to generate PDF report: ${downloadError.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleClear = () => {
+    setForm(
+      Object.keys(defaultForm).reduce(
+        (acc, k) => ({ ...acc, [k]: "" }),
+        {},
+      ),
+    );
+    setResult(null);
+    setErr("");
+    setAnalysisCache({});
+  };
+
+  const baseAiExplanation =
+    result?.ai_explanation || result?.aiExplanation || "";
+  const activeAiExplanation =
+    analysisCache[`${language}:${clientType}`] ?? baseAiExplanation;
+
+  useEffect(() => {
+    const regenerateForAudience = async () => {
+      if (!result) return;
+      const lang = language;
+      const key = `${lang}:${clientType}`;
+      const cached = analysisCache[key];
+
+      if (!String(lang).toLowerCase().startsWith("ru")) {
+        if (cached !== undefined) {
+          setResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ai_explanation: cached,
+                  language: lang,
+                }
+              : prev,
+          );
+          return;
+        }
+      }
+
+      setAnalysisRefreshing(true);
+      try {
+        const response = await fetch(`${API_BASE}/api/commentary`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            analysis: result,
+            patient_values: result.patient_values,
+            shap_values: result.shap_values || result.shapValues || [],
+            language: lang,
+            client_type: clientType,
+          }),
+        });
+        if (!response.ok) {
+          let msg = `${response.status} ${response.statusText}`;
+          try {
+            const errJson = await response.json();
+            if (errJson?.error) msg = errJson.error;
+          } catch {
+            // ignore
+          }
+          throw new Error(msg);
+        }
+        const data = await response.json();
+        const newText = data.ai_explanation || data.aiExplanation || "";
+        setAnalysisCache((prev) => ({ ...prev, [key]: newText }));
+        setResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                ai_explanation: newText,
+                language: data.language || lang,
+                risk_level: data.risk_level || prev.risk_level,
+              }
+            : prev,
+        );
+      } catch (e) {
+        setErr(`Failed to refresh commentary: ${e.message}`);
+      } finally {
+        setAnalysisRefreshing(false);
+      }
+    };
+
+    if (result) {
+      regenerateForAudience();
+    }
+  }, [language, clientType, result, analysisCache, clientType]);
+
+  return {
+    // state
+    currentSection,
+    setCurrentSection,
+    form,
+    setForm,
+    result,
+    loading,
+    downloading,
+    err,
+    mobileMenuOpen,
+    setMobileMenuOpen,
+    clientType,
+    setClientType,
+    language,
+    setLanguage,
+    analysisRefreshing,
+    // derived
+    t,
+    validate,
+    activeAiExplanation,
+    // handlers
+    handleChange,
+    handleSubmit,
+    handleDownload,
+    handleClear,
+  };
+}

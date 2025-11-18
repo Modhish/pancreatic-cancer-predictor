@@ -1500,11 +1500,7 @@ def generate_clinical_commentary(self, prediction: int, probability: float,
                 or locale_bundle.get('scientist', {})
             )
         probability_label = audience_bundle.get('probability_label', locale_bundle.get('probability_label', 'Risk probability'))
-        # For Russian, use a deterministic RU generator to guarantee clean Cyrillic
-        if locale_code == 'ru':
-            return self._generate_ru_commentary(
-                prediction, probability, shap_values, patient_data, audience
-            )
+        # Ensure RU follows the same generation path as EN for identical structure
         if groq_client is None:
 
             return self._generate_fallback_commentary(
@@ -1833,12 +1829,12 @@ def _generate_fallback_commentary(self, prediction: int, probability: float,
             lines.extend(f"- {item}" for item in support_items)
             lines.append('')
             # Optional extras for patient
-            if locale_code != 'ru' and audience_bundle.get('timeline_title') and isinstance(audience_bundle.get('timeline'), dict):
+            if audience_bundle.get('timeline_title') and isinstance(audience_bundle.get('timeline'), dict):
                 lines.append(audience_bundle['timeline_title'])
                 tmap = audience_bundle['timeline']
                 lines.extend(f"- {item}" for item in tmap.get(risk_level, tmap.get('Low', [])))
                 lines.append('')
-            if locale_code != 'ru' and audience_bundle.get('questions_title') and isinstance(audience_bundle.get('questions'), list):
+            if audience_bundle.get('questions_title') and isinstance(audience_bundle.get('questions'), list):
                 lines.append(audience_bundle['questions_title'])
                 lines.extend(f"- {q}" for q in audience_bundle.get('questions', []))
                 lines.append('')
@@ -3539,7 +3535,7 @@ try:
     COMMENTARY_LOCALE['ru']['patient'] = {
         'header_template': '\u041f\u0415\u0420\u0421\u041e\u041d\u0410\u041b\u042c\u041d\u042b\u0419 \u041e\u0422\u0427\u0415\u0422 | {risk} \u0420\u0418\u0421\u041a',
         'probability_label': '\u0412\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u044c \u0441\u043a\u0440\u0438\u043d\u0438\u043d\u0433\u0430',
-        'drivers_title': '\u0421\u0418\u0413\u041d\u0410\u041b\u042c\u041d\u042b\u0415 \u0424\u0410\u041a\u0422\u041e\u0420\u042b',
+        'drivers_title': '\u041a\u041b\u042e\u0427\u0415\u0412\u042b\u0415 \u0421\u0418\u0413\u041d\u0410\u041b\u042b',
         'impact_terms': {
             'positive': '\u0432\u044b\u0437\u044b\u0432\u0430\u0435\u0442 \u043e\u0431\u0435\u0441\u043f\u043e\u043a\u043e\u0435\u043d\u043d\u043e\u0441\u0442\u044c',
             'negative': '\u0437\u0430\u0449\u0438\u0442\u043d\u044b\u0439 \u044d\u0444\u0444\u0435\u043a\u0442',
@@ -3758,3 +3754,125 @@ try:
 except Exception:
     pass
 
+# --- RU exact-heading alignments to ensure pixel parity with EN --------------
+try:
+    # Patient: ensure drivers title and section headings are identical by intent
+    COMMENTARY_LOCALE['ru']['patient']['drivers_title'] = 'КЛЮЧЕВЫЕ СИГНАЛЫ'
+    COMMENTARY_LOCALE['ru']['patient']['outline_template'] = (
+        '{header}\n'
+        '{probability_label}: <укажи в процентах>\n\n'
+        'ОСНОВНОЕ СООБЩЕНИЕ\n'
+        '- 3–4 фразы в доступной речи.\n\n'
+        'КЛЮЧЕВЫЕ СИГНАЛЫ\n'
+        '- 3 пункта: что они значат и как реагировать.\n\n'
+        'СЛЕДУЮЩИЕ ШАГИ\n'
+        '- чёткий пошаговый план с сроками.\n\n'
+        'ТРЕВОЖНЫЕ СИМПТОМЫ\n'
+        '- критические признаки и к кому обращаться.\n\n'
+        'ПОДДЕРЖКА И РЕСУРСЫ\n'
+        '- полезные советы и дополнительные ресурсы.\n\n'
+        'ПАМЯТКА ПО УХОДУ\n'
+        '- обратитесь к вашей клинической команде для окончательных решений.'
+    )
+    # Professional: align titles and add outline mirroring EN
+    COMMENTARY_LOCALE['ru']['professional']['drivers_title'] = 'ВЕДУЩИЕ СИГНАЛЫ'
+    COMMENTARY_LOCALE['ru']['professional']['synopsis_title'] = 'ОБЗОР ИССЛЕДОВАНИЙ'
+    COMMENTARY_LOCALE['ru']['professional']['reminder_title'] = 'ПАМЯТКА ПО БЕЗОПАСНОСТИ'
+    COMMENTARY_LOCALE['ru']['professional']['outline_template'] = (
+        '{header}\n'
+        '{probability_label}: <укажи в процентах>\n\n'
+        'ВЕДУЩИЕ СИГНАЛЫ\n'
+        '- 5 кратких пунктов, связывающих факторы с патофизиологией, дифференциалами и тактикой обследования.\n\n'
+        'ОБЗОР ИССЛЕДОВАНИЙ\n'
+        '- 3–4 предложения о порогах, стадировании и сопутствующих рисках.\n\n'
+        'РЕКОМЕНДУЕМЫЕ ОБСЛЕДОВАНИЯ\n'
+        '- 4–6 действий с таймингом и ответственными службами (изображения, анализы, процедуры).\n\n'
+        'ВЗАИМОДЕЙСТВИЕ И ДАННЫЕ\n'
+        '- Многопрофильная координация и передача данных, включая обучение пациента.\n\n'
+        'СРОКИ НАБЛЮДЕНИЯ\n'
+        '- Этапные контрольные точки, привязанные к клиническим триггерам.\n\n'
+        'ПАМЯТКА ПО БЕЗОПАСНОСТИ\n'
+        '- Одно предложение, подчёркивающее ответственность лечащего врача.'
+    )
+except Exception:
+    pass
+
+# --- RU exact-heading alignments (clean Unicode overrides) -------------------
+try:
+    # Patient parity
+    COMMENTARY_LOCALE['ru']['patient']['drivers_title'] = 'КЛЮЧЕВЫЕ СИГНАЛЫ'
+    COMMENTARY_LOCALE['ru']['patient']['outline_template'] = (
+        '{header}\n'
+        '{probability_label}: <укажи в процентах>\n\n'
+        'ОСНОВНОЕ СООБЩЕНИЕ\n'
+        '- 3–4 фразы в доступной речи.\n\n'
+        'КЛЮЧЕВЫЕ СИГНАЛЫ\n'
+        '- 3 пункта: что они значат и как реагировать.\n\n'
+        'СЛЕДУЮЩИЕ ШАГИ\n'
+        '- чёткий пошаговый план с сроками.\n\n'
+        'ТРЕВОЖНЫЕ СИМПТОМЫ\n'
+        '- критические признаки и к кому обращаться.\n\n'
+        'ПОДДЕРЖКА И РЕСУРСЫ\n'
+        '- полезные советы и дополнительные ресурсы.\n\n'
+        'ПАМЯТКА ПО УХОДУ\n'
+        '- обратитесь к вашей клинической команде для окончательных решений.'
+    )
+    # Professional parity
+    COMMENTARY_LOCALE['ru']['professional']['drivers_title'] = 'ВЕДУЩИЕ СИГНАЛЫ'
+    COMMENTARY_LOCALE['ru']['professional']['synopsis_title'] = 'ОБЗОР ИССЛЕДОВАНИЙ'
+    COMMENTARY_LOCALE['ru']['professional']['reminder_title'] = 'ПАМЯТКА ПО БЕЗОПАСНОСТИ'
+    COMMENTARY_LOCALE['ru']['professional']['outline_template'] = (
+        '{header}\n'
+        '{probability_label}: <укажи в процентах>\n\n'
+        'ВЕДУЩИЕ СИГНАЛЫ\n'
+        '- 5 кратких пунктов, связывающих факторы с патофизиологией, дифференциалами и тактикой обследования.\n\n'
+        'ОБЗОР ИССЛЕДОВАНИЙ\n'
+        '- 3–4 предложения о порогах, стадировании и сопутствующих рисках.\n\n'
+        'РЕКОМЕНДУЕМЫЕ ОБСЛЕДОВАНИЯ\n'
+        '- 4–6 действий с таймингом и ответственными службами (изображения, анализы, процедуры).\n\n'
+        'ВЗАИМОДЕЙСТВИЕ И ДАННЫЕ\n'
+        '- Многопрофильная координация и передача данных, включая обучение пациента.\n\n'
+        'СРОКИ НАБЛЮДЕНИЯ\n'
+        '- Этапные контрольные точки, привязанные к клиническим триггерам.\n\n'
+        'ПАМЯТКА ПО БЕЗОПАСНОСТИ\n'
+        '- Одно предложение, подчёркивающее ответственность лечащего врача.'
+    )
+    # Scientist parity
+    COMMENTARY_LOCALE['ru']['scientist']['drivers_title'] = 'ВЕДУЩИЕ СИГНАЛЫ'
+    COMMENTARY_LOCALE['ru']['scientist']['synopsis_title'] = 'ОБЗОР ИССЛЕДОВАНИЙ'
+    COMMENTARY_LOCALE['ru']['scientist']['actions_title'] = 'РЕКОМЕНДУЕМЫЕ ОБСЛЕДОВАНИЯ'
+    COMMENTARY_LOCALE['ru']['scientist']['coordination_title'] = 'ВЗАИМОДЕЙСТВИЕ И ДАННЫЕ'
+    COMMENTARY_LOCALE['ru']['scientist']['monitoring_title'] = 'СРОКИ НАБЛЮДЕНИЯ'
+    COMMENTARY_LOCALE['ru']['scientist']['reminder_title'] = 'НАУЧНОЕ НАПОМИНАНИЕ'
+    COMMENTARY_LOCALE['ru']['scientist']['outline_template'] = (
+        '{header}\n'
+        '{probability_label}: <укажи в процентах>\n\n'
+        'МЕТОДИКА\n'
+        '- Кратко отметьте семейство модели и использование SHAP; укажите ключевые допущения и источники неопределённости (3–4 пункта).\n\n'
+        'ВЕДУЩИЕ СИГНАЛЫ\n'
+        '- Пять пунктов, сопоставляющих топ‑факторы с механизмами и потенциальными смещениями.\n\n'
+        'ИНТЕРПРЕТАЦИЯ МОДЕЛИ\n'
+        '- 3–4 предложения, связывающие атрибуции с патофизиологией и возможными областями пере-/недообучения.\n\n'
+        'ОГРАНИЧЕНИЯ\n'
+        '- Укажите отбора/выбора, вариабельность анализов, пропуски модальностей и возможный дрейф.\n\n'
+        'РЕКОМЕНДУЕМЫЕ ОБСЛЕДОВАНИЯ\n'
+        '- 4–6 шагов по данным/изображениям/анализам с таймингом и контролем качества данных.\n\n'
+        'НАУЧНОЕ НАПОМИНАНИЕ\n'
+        '- Завершите предложением о исследовательском назначении и клиническом надзоре.'
+    )
+except Exception:
+    pass
+# --- RU exact-heading overrides (ASCII-escaped) -----------------------------
+try:
+    COMMENTARY_LOCALE['ru']['patient']['drivers_title'] = '\u041a\u041b\u042e\u0427\u0415\u0412\u042b\u0415 \u0421\u0418\u0413\u041d\u0410\u041b\u042b'
+    COMMENTARY_LOCALE['ru']['professional']['drivers_title'] = '\u0412\u0415\u0414\u0423\u0429\u0418\u0415 \u0421\u0418\u0413\u041d\u0410\u041b\u042b'
+    COMMENTARY_LOCALE['ru']['professional']['synopsis_title'] = '\u041e\u0411\u0417\u041e\u0420 \u0418\u0421\u0421\u041b\u0415\u0414\u041e\u0412\u0410\u041d\u0418\u0419'
+    COMMENTARY_LOCALE['ru']['professional']['reminder_title'] = '\u041f\u0410\u041c\u042f\u0422\u041a\u0410 \u041f\u041e \u0411\u0415\u0417\u041e\u041f\u0410\u0421\u041d\u041e\u0421\u0422\u0418'
+    COMMENTARY_LOCALE['ru']['scientist']['drivers_title'] = '\u0412\u0415\u0414\u0423\u0429\u0418\u0415 \u0421\u0418\u0413\u041d\u0410\u041b\u042b'
+    COMMENTARY_LOCALE['ru']['scientist']['synopsis_title'] = '\u041e\u0411\u0417\u041e\u0420 \u0418\u0421\u0421\u041b\u0415\u0414\u041e\u0412\u0410\u041d\u0418\u0419'
+    COMMENTARY_LOCALE['ru']['scientist']['actions_title'] = '\u0420\u0415\u041a\u041e\u041c\u0415\u041d\u0414\u0423\u0415\u041c\u042b\u0415 \u041e\u0411\u0421\u041b\u0415\u0414\u041e\u0412\u0410\u041d\u0418\u042f'
+    COMMENTARY_LOCALE['ru']['scientist']['coordination_title'] = '\u0412\u0417\u0410\u0418\u041c\u041e\u0414\u0415\u0419\u0421\u0422\u0412\u0418\u0415 \u0418 \u0414\u0410\u041d\u041d\u042b\u0415'
+    COMMENTARY_LOCALE['ru']['scientist']['monitoring_title'] = '\u0421\u0420\u041e\u041a\u0418 \u041d\u0410\u0411\u041b\u042e\u0414\u0415\u041d\u0418\u042f'
+    COMMENTARY_LOCALE['ru']['scientist']['reminder_title'] = '\u041d\u0410\u0423\u0427\u041d\u041e\u0415 \u041d\u0410\u041f\u041e\u041c\u0418\u041d\u0410\u041d\u0418\u0415'
+except Exception:
+    pass
