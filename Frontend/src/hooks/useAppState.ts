@@ -1,15 +1,44 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "../translations";
 import { RANGES } from "../constants/ranges";
 import { fixMojibake } from "../utils/aiAnalysis";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+
+const DEFAULT_LANGUAGE = "en";
 
 // Configure frontend i18n once at module load
 i18n.configure({
   locales: SUPPORTED_LANGUAGES.map((l) => l.value),
-  defaultLocale: "en",
+  defaultLocale: DEFAULT_LANGUAGE,
 });
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
+
+const SECTION_IDS = ["home", "about", "features", "diagnostic"] as const;
+type SectionId = (typeof SECTION_IDS)[number];
+const DEFAULT_SECTION: SectionId = "home";
+const SECTION_SET = new Set<string>(SECTION_IDS);
+
+const SUPPORTED_LANGUAGE_VALUES = new Set(
+  SUPPORTED_LANGUAGES.map((lang) => lang.value),
+);
+
+const canonicalSectionPath = (section: SectionId): string =>
+  section === "home" ? "/home" : `/${section}`;
+
+const normalizeSectionFromPath = (pathname: string): SectionId => {
+  if (!pathname || pathname === "/") {
+    return DEFAULT_SECTION;
+  }
+  const sanitized = pathname
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  if (!sanitized) {
+    return DEFAULT_SECTION;
+  }
+  return SECTION_SET.has(sanitized) ? (sanitized as SectionId) : DEFAULT_SECTION;
+};
 
 type AiPayload = Partial<Record<string, unknown>> | null | undefined;
 
@@ -125,25 +154,71 @@ export interface UseAppState {
 }
 
 export default function useAppState(): UseAppState {
-  const [currentSection, setCurrentSection] = useState<string>("home");
-  const [form, setForm] =
-    useState<FormState>(defaultForm);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [currentSection, setCurrentSectionState] =
+    useState<SectionId>(() => normalizeSectionFromPath(location.pathname));
+  const [form, setForm] = useState<FormState>(defaultForm);
   const [result, setResult] = useState<AppResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [err, setErr] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [clientType, setClientType] = useState("patient");
-  const [language, setLanguage] = useState<string>(() => {
+  const [language, setLanguageState] = useState<string>(() => {
+    const langFromQuery = searchParams.get("lang");
+    if (langFromQuery) {
+      const normalizedQuery = langFromQuery.toLowerCase();
+      if (SUPPORTED_LANGUAGE_VALUES.has(normalizedQuery)) {
+        return normalizedQuery;
+      }
+    }
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("language");
-      return saved === "ru" ? "ru" : "en";
+      if (saved) {
+        const normalized = saved.toLowerCase();
+        if (SUPPORTED_LANGUAGE_VALUES.has(normalized)) {
+          return normalized;
+        }
+      }
+      return DEFAULT_LANGUAGE;
     }
-    return "en";
+    return DEFAULT_LANGUAGE;
   });
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
 
   const t = useMemo(() => createTranslator(language), [language]);
+
+  useEffect(() => {
+    const normalizedSection = normalizeSectionFromPath(location.pathname);
+    setCurrentSectionState((prev) =>
+      prev === normalizedSection ? prev : normalizedSection,
+    );
+    const canonicalPath = canonicalSectionPath(normalizedSection);
+    if (location.pathname !== canonicalPath) {
+      navigate(
+        { pathname: canonicalPath, search: location.search },
+        { replace: true },
+      );
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    const langFromQuery = searchParams.get("lang");
+    if (langFromQuery) {
+      const normalized = langFromQuery.toLowerCase();
+      if (SUPPORTED_LANGUAGE_VALUES.has(normalized)) {
+        if (normalized !== language) {
+          setLanguageState(normalized);
+        }
+        return;
+      }
+    }
+    const params = new URLSearchParams(searchParams);
+    params.set("lang", language);
+    setSearchParams(params, { replace: true });
+  }, [language, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -155,6 +230,43 @@ export default function useAppState(): UseAppState {
       // ignore
     }
   }, [language]);
+
+  const setCurrentSection = useCallback(
+    (section: string) => {
+      const normalized = SECTION_SET.has(section)
+        ? (section as SectionId)
+        : DEFAULT_SECTION;
+      setCurrentSectionState((prev) =>
+        prev === normalized ? prev : normalized,
+      );
+      const targetPath = canonicalSectionPath(normalized);
+      if (location.pathname !== targetPath) {
+        navigate(
+          { pathname: targetPath, search: location.search },
+          { replace: false },
+        );
+      }
+    },
+    [location.pathname, location.search, navigate],
+  );
+
+  const setLanguage = useCallback(
+    (value: string) => {
+      const normalizedValue = (value || DEFAULT_LANGUAGE).toLowerCase();
+      const normalized = SUPPORTED_LANGUAGE_VALUES.has(normalizedValue)
+        ? normalizedValue
+        : DEFAULT_LANGUAGE;
+      setLanguageState((prev) =>
+        prev === normalized ? prev : normalized,
+      );
+      const params = new URLSearchParams(searchParams);
+      if (params.get("lang") !== normalized) {
+        params.set("lang", normalized);
+        setSearchParams(params, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement>,
