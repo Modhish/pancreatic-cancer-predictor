@@ -71,6 +71,19 @@ def execute_diagnostic_pipeline(
     if not language.startswith("ru"):
         ai_explanation = repair_text_encoding(ai_explanation)
 
+    try:
+        audience_commentaries = diagnostic_system.build_audience_commentaries(
+            prediction,
+            probability,
+            shap_values,
+            features,
+            language,
+            client_type,
+            ai_explanation,
+        )
+    except Exception:
+        audience_commentaries = {client_type: ai_explanation}
+
     ai_explanation_b64 = encode_text_base64(ai_explanation)
     analysis = {
         "prediction": int(prediction),
@@ -83,6 +96,7 @@ def execute_diagnostic_pipeline(
         "patient_values": normalized,
         "language": language,
         "client_type": client_type,
+        "audience_commentaries": audience_commentaries,
     }
 
     return analysis, None, 200

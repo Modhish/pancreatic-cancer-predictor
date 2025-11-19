@@ -87,6 +87,8 @@ export type FormKey = keyof FormState;
 export interface AppResult {
   probability?: number;
   risk_level?: string;
+  client_type?: string;
+  audience_commentaries?: Record<string, string>;
   ai_explanation?: string;
   aiExplanation?: string;
   ai_explanation_b64?: string;
@@ -139,9 +141,6 @@ export default function useAppState(): UseAppState {
     }
     return "en";
   });
-  const [analysisCache, setAnalysisCache] = useState<
-    Record<string, string>
-  >({});
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
 
   const t = useMemo(() => createTranslator(language), [language]);
@@ -219,9 +218,18 @@ export default function useAppState(): UseAppState {
       }
       const data = await res.json();
       const aiExplanation = getAiExplanationFromPayload(data);
-      setResult({ ...data, ai_explanation: aiExplanation });
-      const cacheKey = `${language}:${clientType}`;
-      setAnalysisCache({ [cacheKey]: aiExplanation });
+      const variants =
+        (data.audience_commentaries as Record<string, string> | undefined) ??
+        {};
+      if (!variants[clientType]) {
+        variants[clientType] = aiExplanation;
+      }
+      setResult({
+        ...data,
+        ai_explanation: aiExplanation,
+        client_type: clientType,
+        audience_commentaries: variants,
+      });
     } catch (e) {
       setErr(
         `Failed to reach the server. Make sure Flask is running on ${API_BASE} (error: ${e.message})`,
@@ -300,35 +308,38 @@ export default function useAppState(): UseAppState {
     );
     setResult(null);
     setErr("");
-    setAnalysisCache({});
   };
 
   const baseAiExplanation = getAiExplanationFromPayload(result);
   const activeAiExplanation =
-    analysisCache[`${language}:${clientType}`] ?? baseAiExplanation;
+    result?.audience_commentaries?.[clientType] ?? baseAiExplanation;
 
   useEffect(() => {
+    if (!result) {
+      return;
+    }
+
+    const lang = String(language || "en").toLowerCase();
+    const currentLang = String(result.language || "").toLowerCase();
+    const cached = result.audience_commentaries?.[clientType];
+
+    if (cached && currentLang === lang) {
+      setAnalysisRefreshing(false);
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              ai_explanation: cached,
+              client_type: clientType,
+              language,
+            }
+          : prev,
+      );
+      return;
+    }
+
+    let cancelled = false;
     const regenerateForAudience = async () => {
-      if (!result) return;
-      const lang = language;
-      const key = `${lang}:${clientType}`;
-      const cached = analysisCache[key];
-
-      if (!String(lang).toLowerCase().startsWith("ru")) {
-        if (cached !== undefined) {
-          setResult((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  ai_explanation: cached,
-                  language: lang,
-                }
-              : prev,
-          );
-          return;
-        }
-      }
-
       setAnalysisRefreshing(true);
       try {
         const response = await fetch(`${API_BASE}/api/commentary`, {
@@ -338,7 +349,7 @@ export default function useAppState(): UseAppState {
             analysis: result,
             patient_values: result.patient_values,
             shap_values: result.shap_values || result.shapValues || [],
-            language: lang,
+            language,
             client_type: clientType,
           }),
         });
@@ -354,28 +365,59 @@ export default function useAppState(): UseAppState {
         }
         const data = await response.json();
         const newText = getAiExplanationFromPayload(data);
-        setAnalysisCache((prev) => ({ ...prev, [key]: newText }));
-        setResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                ai_explanation: newText,
-                language: data.language || lang,
-                risk_level: data.risk_level || prev.risk_level,
-              }
-            : prev,
-        );
+        if (cancelled) return;
+        setResult((prev) => {
+          if (!prev) return prev;
+          const incomingLanguage = data.language || language;
+          const prevLanguage = String(prev.language || "").toLowerCase();
+          const shouldResetMap =
+            String(incomingLanguage || "").toLowerCase() !== prevLanguage;
+          const previousMap = shouldResetMap
+            ? {}
+            : prev.audience_commentaries ?? {};
+          const mergedMap = {
+            ...previousMap,
+            ...(data.audience_commentaries as Record<string, string> | undefined ??
+              {}),
+          };
+          if (newText) {
+            mergedMap[clientType] = newText;
+          }
+          return {
+            ...prev,
+            ai_explanation: newText ?? prev.ai_explanation,
+            ai_explanation_b64:
+              data.ai_explanation_b64 ?? prev.ai_explanation_b64,
+            audience_commentaries: mergedMap,
+            client_type: clientType,
+            language: incomingLanguage,
+            risk_level: data.risk_level || prev.risk_level,
+            prediction:
+              typeof data.prediction === "number"
+                ? data.prediction
+                : prev.prediction,
+            probability:
+              typeof data.probability === "number"
+                ? data.probability
+                : prev.probability,
+          };
+        });
       } catch (e) {
-        setErr(`Failed to refresh commentary: ${e.message}`);
+        if (!cancelled) {
+          setErr(`Failed to refresh commentary: ${e.message}`);
+        }
       } finally {
-        setAnalysisRefreshing(false);
+        if (!cancelled) {
+          setAnalysisRefreshing(false);
+        }
       }
     };
 
-    if (result) {
-      regenerateForAudience();
-    }
-  }, [language, clientType, result, analysisCache, clientType]);
+    regenerateForAudience();
+    return () => {
+      cancelled = true;
+    };
+  }, [language, clientType, result]);
 
   return {
     // state

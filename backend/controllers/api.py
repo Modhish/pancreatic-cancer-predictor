@@ -135,6 +135,18 @@ def regenerate_commentary():
         )
         if not str(language).lower().startswith("ru"):
             commentary = repair_text_encoding(commentary)
+        try:
+            audience_commentaries = diagnostic_system.build_audience_commentaries(
+                prediction,
+                probability,
+                shap_values,
+                features,
+                language,
+                client_type,
+                commentary,
+            )
+        except Exception:
+            audience_commentaries = {client_type: commentary}
         risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
         return jsonify(
             {
@@ -144,6 +156,7 @@ def regenerate_commentary():
                 "risk_level": risk_level,
                 "prediction": int(prediction),
                 "probability": float(probability),
+                "audience_commentaries": audience_commentaries,
             }
         )
     except Exception as exc:  # pragma: no cover

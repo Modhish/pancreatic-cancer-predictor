@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .commentary import (
+    _build_audience_commentaries,
     _generate_fallback_commentary,
     _generate_ru_commentary,
     generate_clinical_commentary,
@@ -16,6 +17,7 @@ MedicalDiagnosticSystem.generate_clinical_commentary = generate_clinical_comment
 MedicalDiagnosticSystem._generate_fallback_commentary = _generate_fallback_commentary
 MedicalDiagnosticSystem._generate_ru_commentary = _generate_ru_commentary
 MedicalDiagnosticSystem.generate_pdf_report = generate_pdf_report
+MedicalDiagnosticSystem.build_audience_commentaries = _build_audience_commentaries
 
 
 # Initialize the singleton diagnostic system instance used across the app.
