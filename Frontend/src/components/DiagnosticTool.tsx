@@ -52,11 +52,7 @@ export default function DiagnosticTool(
   return (
     <div className="py-16 bg-slate-100" dir="ltr">
       <div className="max-w-[1800px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <DiagnosticHeader
-          clientType={clientType}
-          setClientType={setClientType}
-          t={t}
-        />
+        <DiagnosticHeader t={t} />
 
         <div className="grid lg:grid-cols-2 gap-8 items-start">
           <DiagnosticFormSection
@@ -68,6 +64,8 @@ export default function DiagnosticTool(
             validate={validate}
             aiExplanation={aiExplanation}
             t={t}
+            clientType={clientType}
+            setClientType={setClientType}
             handleChange={handleChange}
             handleSubmit={handleSubmit}
             handleDownload={handleDownload}
@@ -84,4 +82,3 @@ export default function DiagnosticTool(
     </div>
   );
 }
-

@@ -48,6 +48,21 @@ def generate_clinical_commentary(self, prediction: int, probability: float,
         # Structure for response (could be more dynamic depending on language)
         language_instruction = locale_bundle.get('language_prompt', 'Respond clearly and precisely.')
         audience_instruction = audience_bundle.get('audience_guidance', '')
+        scientist_instruction = ""
+        if scientist_mode:
+            scientist_instruction = (
+                "You are an AI assistant that provides clinical analysis specifically for biomedical and "
+                "clinical researchers when the audience is Scientist. "
+                "Emphasize pathophysiology, mechanisms of action, molecular and cellular processes, and "
+                "relevant biomarkers. Summarize and interpret current research evidence, including pivotal "
+                "clinical trials, study designs, and statistically significant outcomes. Discuss limitations "
+                "of the available data, sources of bias, and unanswered research questions. Use precise "
+                "scientific terminology suitable for researchers; do not simplify for lay readers. Highlight "
+                "implications for translational research, drug development, and future clinical studies. The "
+                "tone and substance must differ from doctor-facing guidance by minimizing bedside management "
+                "advice and foregrounding mechanisms, data interpretation, and research perspectives. Respond "
+                f"in the user's requested language ({'English' if locale_code == 'en' else 'Russian'})."
+            )
         response_structure = audience_bundle.get('outline_template', '{header}\n{probability_label}: <...>')
         response_structure = response_structure.format(header=header_text, probability_label=probability_label)
         
@@ -75,6 +90,7 @@ PATIENT LABORATORY VALUES:
 
 Be accurate, align with audience needs, and emphasize that this is a screening tool requiring clinical correlation.
 {audience_instruction}
+{scientist_instruction}
 {language_instruction}
 Compose a thorough narrative totaling roughly 600-800 words to ensure complete context.
 Keep the structure tidy with no extra blank lines beyond single spacing between sections.

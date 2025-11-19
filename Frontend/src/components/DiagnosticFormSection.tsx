@@ -14,6 +14,8 @@ export interface DiagnosticFormSectionProps {
   validate: { ok: boolean; message: string };
   aiExplanation: string;
   t: (key: string) => string;
+  clientType: string;
+  setClientType: (type: string) => void;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleSubmit: () => Promise<void>;
   handleDownload: () => Promise<void>;
@@ -32,6 +34,8 @@ export default function DiagnosticFormSection(
     validate,
     aiExplanation,
     t,
+    clientType,
+    setClientType,
     handleChange,
     handleSubmit,
     handleDownload,
@@ -94,6 +98,8 @@ export default function DiagnosticFormSection(
         downloading={downloading}
         handleDownload={handleDownload}
         result={result}
+        clientType={clientType}
+        setClientType={setClientType}
         t={t}
       />
     </section>
