@@ -252,7 +252,8 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
             )
         )
 
-        pdf_bytes = bytes(pdf.output(dest='S'))
+        # FPDF returns a string in Python 3 when dest='S'; encode to bytes explicitly
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
         buffer = BytesIO(pdf_bytes)
         buffer.seek(0)
         return buffer

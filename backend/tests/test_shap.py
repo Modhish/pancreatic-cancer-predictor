@@ -1,5 +1,5 @@
 def test_mock_shap_returns_sorted_top9():
-    from backend.app import MedicalDiagnosticSystem
+    from services.model_engine import MedicalDiagnosticSystem
 
     system = MedicalDiagnosticSystem()
     # Nominal inputs
@@ -8,6 +8,5 @@ def test_mock_shap_returns_sorted_top9():
     assert isinstance(values, list)
     assert len(values) == 9
     # Ensure sorted by importance desc
-    importances = [v['importance'] for v in values]
+    importances = [v["importance"] for v in values]
     assert importances == sorted(importances, reverse=True)
-

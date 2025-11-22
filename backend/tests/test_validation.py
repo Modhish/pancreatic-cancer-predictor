@@ -2,7 +2,8 @@ from typing import Dict
 
 
 def test_parse_patient_inputs_defaults():
-    from backend.app import parse_patient_inputs, FEATURE_DEFAULTS
+    from core.constants import FEATURE_DEFAULTS
+    from services.pipeline import parse_patient_inputs
 
     payload: Dict[str, float] = {}
     features, normalized = parse_patient_inputs(payload)
@@ -13,7 +14,8 @@ def test_parse_patient_inputs_defaults():
 
 
 def test_validate_medical_data_in_range():
-    from backend.app import MedicalDiagnosticSystem, FEATURE_DEFAULTS
+    from core.constants import FEATURE_DEFAULTS
+    from services.model_engine import MedicalDiagnosticSystem
 
     system = MedicalDiagnosticSystem()
     sample = {k: float(v) for k, v in FEATURE_DEFAULTS}
@@ -23,23 +25,23 @@ def test_validate_medical_data_in_range():
 
 
 def test_validate_medical_data_out_of_range():
-    from backend.app import MedicalDiagnosticSystem
+    from services.model_engine import MedicalDiagnosticSystem
 
     system = MedicalDiagnosticSystem()
     bad = {
-        'wbc': 100.0,  # invalid
-        'rbc': 0.1,    # invalid
-        'plt': 1000.0, # invalid
-        'hgb': 10.0,   # invalid
-        'hct': 10.0,   # invalid
-        'mpv': 20.0,   # invalid
-        'pdw': 50.0,   # invalid
-        'mono': 2.0,   # invalid
-        'baso_abs': 1.0, # invalid
-        'baso_pct': 10.0, # invalid
-        'glucose': 20.0,  # invalid
-        'act': 100.0,     # invalid
-        'bilirubin': 100.0 # invalid
+        "wbc": 100.0,  # invalid
+        "rbc": 0.1,  # invalid
+        "plt": 1000.0,  # invalid
+        "hgb": 10.0,  # invalid
+        "hct": 10.0,  # invalid
+        "mpv": 20.0,  # invalid
+        "pdw": 50.0,  # invalid
+        "mono": 2.0,  # invalid
+        "baso_abs": 1.0,  # invalid
+        "baso_pct": 10.0,  # invalid
+        "glucose": 20.0,  # invalid
+        "act": 100.0,  # invalid
+        "bilirubin": 100.0,  # invalid
     }
     ok, errors = system.validate_medical_data(bad)
     assert ok is False
@@ -47,7 +49,7 @@ def test_validate_medical_data_out_of_range():
 
 
 def test_rule_based_prediction_thresholds():
-    from backend.app import MedicalDiagnosticSystem
+    from services.model_engine import MedicalDiagnosticSystem
 
     system = MedicalDiagnosticSystem()
     # Very low-risk values near normal
@@ -55,4 +57,3 @@ def test_rule_based_prediction_thresholds():
     pred, prob = system._rule_based_prediction(features)
     assert 0.1 <= prob <= 0.95
     assert pred in (0, 1)
-

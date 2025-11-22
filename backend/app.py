@@ -12,9 +12,7 @@ from __future__ import annotations
 import os
 
 from core.settings import app, logger
-from controllers.api import register_routes
-from services.model_engine import FEATURE_DEFAULTS, MedicalDiagnosticSystem
-from services.pipeline import parse_patient_inputs
+from controllers import register_routes
 
 register_routes(app)
 

@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+import sys
+
 import pytest
 
 
@@ -10,12 +13,15 @@ def _set_test_env():
     yield
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def app_instance():
-    # Import within backend package context
-    import importlib
-    backend_app = importlib.import_module('app')
-    return backend_app.app
+    # Make sure the backend package is importable regardless of cwd
+    backend_dir = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(backend_dir))
+
+    from app import app as flask_app
+
+    return flask_app
 
 
 @pytest.fixture()
