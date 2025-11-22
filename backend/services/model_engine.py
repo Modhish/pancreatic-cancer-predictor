@@ -100,7 +100,7 @@ class MedicalDiagnosticSystem:
                     logger.warning("Could not initialize SHAP explainer: %s", exc)
                 logger.info("Model loaded successfully")
             else:
-                logger.warning("Model file not found, using mock predictions")
+                logger.info("Model file not found at %s, using rule-based predictions", model_path)
                 self.model = None
         except Exception as exc:  # pragma: no cover
             logger.error("Error loading model: %s", exc)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "../translations";
 import { RANGES } from "../constants/ranges";
 import { fixMojibake } from "../utils/aiAnalysis";
@@ -118,6 +118,8 @@ export interface AppResult {
   risk_level?: string;
   client_type?: string;
   audience_commentaries?: Record<string, string>;
+  // Optional per-language cache (key: `${lang}:${audience}`)
+  audience_commentaries_by_lang?: Record<string, string>;
   ai_explanation?: string;
   aiExplanation?: string;
   ai_explanation_b64?: string;
@@ -187,6 +189,8 @@ export default function useAppState(): UseAppState {
     return DEFAULT_LANGUAGE;
   });
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
+  const inFlightCommentaryKey = useRef<string | null>(null);
+  const lastCompletedCommentaryKey = useRef<string | null>(null);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -336,11 +340,17 @@ export default function useAppState(): UseAppState {
       if (!variants[clientType]) {
         variants[clientType] = aiExplanation;
       }
+      const langKey = `${language}:${clientType}`;
+      const perLang: Record<string, string> = { [langKey]: aiExplanation };
+      for (const [aud, text] of Object.entries(variants)) {
+        perLang[`${language}:${aud}`] = text;
+      }
       setResult({
         ...data,
         ai_explanation: aiExplanation,
         client_type: clientType,
         audience_commentaries: variants,
+        audience_commentaries_by_lang: perLang,
       });
     } catch (e) {
       setErr(
@@ -424,7 +434,9 @@ export default function useAppState(): UseAppState {
 
   const baseAiExplanation = getAiExplanationFromPayload(result);
   const activeAiExplanation =
-    result?.audience_commentaries?.[clientType] ?? baseAiExplanation;
+    result?.audience_commentaries_by_lang?.[`${language}:${clientType}`] ??
+    result?.audience_commentaries?.[clientType] ??
+    baseAiExplanation;
 
   useEffect(() => {
     if (!result) {
@@ -433,22 +445,34 @@ export default function useAppState(): UseAppState {
 
     const lang = String(language || "en").toLowerCase();
     const currentLang = String(result.language || "").toLowerCase();
-    const cached = result.audience_commentaries?.[clientType];
+    const cachedLangKey = `${lang}:${clientType}`;
+    const cached =
+      result.audience_commentaries_by_lang?.[cachedLangKey] ??
+      result.audience_commentaries?.[clientType];
 
-    if (cached && currentLang === lang) {
+    if (
+      cached &&
+      currentLang === lang &&
+      result.ai_explanation === cached &&
+      result.client_type === clientType
+    ) {
+      // We already have the right commentary; no fetch needed.
       setAnalysisRefreshing(false);
-      setResult((prev) =>
-        prev
-          ? {
-              ...prev,
-              ai_explanation: cached,
-              client_type: clientType,
-              language,
-            }
-          : prev,
-      );
       return;
     }
+
+    const commentaryKey = `${lang}:${clientType}:${
+      result.ai_explanation_b64 || result.ai_explanation || ""
+    }:${result.probability ?? ""}:${result.prediction ?? ""}`;
+
+    if (
+      inFlightCommentaryKey.current === commentaryKey ||
+      lastCompletedCommentaryKey.current === commentaryKey
+    ) {
+      return;
+    }
+
+    inFlightCommentaryKey.current = commentaryKey;
 
     let cancelled = false;
     const regenerateForAudience = async () => {
@@ -484,16 +508,23 @@ export default function useAppState(): UseAppState {
           const prevLanguage = String(prev.language || "").toLowerCase();
           const shouldResetMap =
             String(incomingLanguage || "").toLowerCase() !== prevLanguage;
-          const previousMap = shouldResetMap
+          const previousMap = shouldResetMap ? {} : prev.audience_commentaries ?? {};
+          const previousByLang = shouldResetMap
             ? {}
-            : prev.audience_commentaries ?? {};
+            : prev.audience_commentaries_by_lang ?? {};
           const mergedMap = {
             ...previousMap,
-            ...(data.audience_commentaries as Record<string, string> | undefined ??
-              {}),
+            ...(data.audience_commentaries as Record<string, string> | undefined ?? {}),
           };
+          const mergedByLang: Record<string, string> = { ...previousByLang };
           if (newText) {
             mergedMap[clientType] = newText;
+            mergedByLang[`${incomingLanguage}:${clientType}`] = newText;
+          }
+          const audienceFromApi =
+            (data.audience_commentaries as Record<string, string> | undefined) ?? {};
+          for (const [aud, text] of Object.entries(audienceFromApi)) {
+            mergedByLang[`${incomingLanguage}:${aud}`] = text;
           }
           return {
             ...prev,
@@ -501,6 +532,7 @@ export default function useAppState(): UseAppState {
             ai_explanation_b64:
               data.ai_explanation_b64 ?? prev.ai_explanation_b64,
             audience_commentaries: mergedMap,
+            audience_commentaries_by_lang: mergedByLang,
             client_type: clientType,
             language: incomingLanguage,
             risk_level: data.risk_level || prev.risk_level,
@@ -522,6 +554,8 @@ export default function useAppState(): UseAppState {
         if (!cancelled) {
           setAnalysisRefreshing(false);
         }
+        inFlightCommentaryKey.current = null;
+        lastCompletedCommentaryKey.current = commentaryKey;
       }
     };
 

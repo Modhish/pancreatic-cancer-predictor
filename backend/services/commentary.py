@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List
 
 from core.constants import (
@@ -193,7 +194,7 @@ End with a concise reminder that definitive care decisions rest with the treatin
 
         try:
             response = groq_client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=600,
