@@ -8,22 +8,13 @@ export interface ShapLineChartProps {
   patientValues?: Record<string, number | string>;
 }
 
-const TIME_LABELS = [
-  "09:40",
-  "09:45",
-  "09:50",
-  "09:55",
-  "10:05",
-  "10:15",
-  "10:25",
-  "10:35",
-  "10:45",
-  "11:00",
-  "11:20",
-  "11:40",
-] as const;
-const COLORS = ["#1d4ed8", "#9333ea", "#16a34a", "#f97316", "#ef4444"];
-const MAX_SERIES = 5;
+// Logical checkpoints that describe how a feature's contribution scales,
+// instead of fake clock times.
+const CONTRIBUTION_STEPS = ["Baseline", "Early shift", "Mid shift", "Late shift", "Net impact"] as const;
+const POS_COLORS = ["#dc2626", "#ef4444", "#f97316", "#fb923c"];
+const NEG_COLORS = ["#16a34a", "#22c55e", "#10b981", "#34d399"];
+const NEUTRAL_COLOR = "#475569";
+const MAX_SERIES = 5; // limit lines for readability
 
 interface Series {
   label: string;
@@ -51,16 +42,18 @@ export default function ShapLineChart(
         10,
         Math.min(90, Math.abs(shapValue) * 1500),
       );
-      const values = TIME_LABELS.map((_, timeIdx) => {
-        const progress = timeIdx / Math.max(1, TIME_LABELS.length - 1);
+      const values = CONTRIBUTION_STEPS.map((_, stepIdx) => {
+        const progress = stepIdx / Math.max(1, CONTRIBUTION_STEPS.length - 1);
         const slope = direction * magnitude * progress;
         const oscillation =
           Math.sin(progress * Math.PI) * magnitude * 0.35 * direction;
         return baseline + slope + oscillation;
       });
+      const colorPool = shapValue > 0 ? POS_COLORS : shapValue < 0 ? NEG_COLORS : [NEUTRAL_COLOR];
+      const color = colorPool[idx % colorPool.length];
       return {
         label: item.feature,
-        color: COLORS[idx % COLORS.length],
+        color,
         values,
       };
     });
@@ -83,7 +76,7 @@ export default function ShapLineChart(
   const height = 260;
   const paddingX = 60;
   const paddingY = 30;
-  const denominator = Math.max(1, TIME_LABELS.length - 1);
+  const denominator = Math.max(1, CONTRIBUTION_STEPS.length - 1);
 
   const scaleX = (idx: number) =>
     paddingX + (idx / denominator) * (width - paddingX * 1.5);
@@ -95,10 +88,10 @@ export default function ShapLineChart(
       <div className="flex items-center gap-2 text-slate-600">
         <LineChart className="h-4 w-4 text-blue-500" />
         <div>
-          <p className="text-sm font-semibold">Clinical Trend Line Chart</p>
+          <p className="text-sm font-semibold">SHAP Contribution Trajectories</p>
           <p className="text-xs text-slate-500">
-            Shows biomarker trajectories over time. Ideal for highlighting
-            acceleration or deceleration of change.
+            Each line shows how a top driver shifts risk from baseline to its net impact
+            (ordered by SHAP importance).
           </p>
         </div>
       </div>
@@ -172,7 +165,7 @@ export default function ShapLineChart(
               })}
             </g>
           ))}
-          {TIME_LABELS.map((label, idx) => (
+          {CONTRIBUTION_STEPS.map((label, idx) => (
             <text
               key={label}
               x={scaleX(idx)}
@@ -189,11 +182,15 @@ export default function ShapLineChart(
             textAnchor="middle"
             className="text-xs font-semibold fill-slate-600 mt-2"
           >
-            Time (clinical workflow checkpoints)
+            Contribution progression (baseline → net impact)
           </text>
         </svg>
       </div>
       <div className="mt-3 text-[0.7rem] text-slate-500 space-y-1">
+        <p>
+          Red hues = risk-raising drivers; green hues = risk-lowering drivers. Lines are scaled by the
+          feature&apos;s SHAP magnitude and start at the patient&apos;s value when available.
+        </p>
       </div>
     </div>
   );
