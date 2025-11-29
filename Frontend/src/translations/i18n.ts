@@ -2,14 +2,11 @@
 // Loads JSON resources and exposes t/__/configure/setLocale/getLocale
 
 import en from "./en.json";
-import ruRaw from "./ru.json";
+import ru from "./ru.json";
 
 export type LocaleBundle = Record<string, string>;
 
 type Registry = Record<string, LocaleBundle>;
-
-// Merge RU over EN to guarantee fallback
-const ru: LocaleBundle = { ...en, ...(ruRaw || {}) };
 
 const registry: Registry = { en, ru };
 
@@ -69,7 +66,7 @@ export const i18n: I18nAPI = {
         registry[lng] = { ...(registry[lng] || {}), ...(res || {}) };
       }
     }
-    // Keep RU fallback to EN
+    // Keep RU fallback to EN for missing keys
     if (registry.ru) registry.ru = { ...en, ...registry.ru };
   },
   setLocale(lang: string): void {

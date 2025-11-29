@@ -4,6 +4,7 @@ import { ShapItem } from "./useShapInsights";
 
 export interface ShapBarPlotProps {
   shapSummary: ShapItem[];
+  t: (key: string) => string;
 }
 
 const POS_COLOR = "#f14668";
@@ -12,7 +13,7 @@ const NEG_COLOR = "#1d7dff";
 export default function ShapBarPlot(
   props: ShapBarPlotProps,
 ): JSX.Element {
-  const { shapSummary } = props;
+  const { shapSummary, t } = props;
 
   const rows = [...shapSummary]
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
@@ -38,10 +39,10 @@ export default function ShapBarPlot(
         </svg>
         <div>
           <p className="text-sm font-semibold text-slate-800">
-            Feature Contribution Bar Plot
+            {t("shap_bar_title")}
           </p>
           <p className="text-xs text-slate-500">
-            Relative SHAP contribution across top features.
+            {t("shap_bar_subtitle")}
           </p>
         </div>
       </div>

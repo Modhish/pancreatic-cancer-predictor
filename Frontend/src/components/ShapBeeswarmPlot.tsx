@@ -4,6 +4,7 @@ import { BeeswarmGroup } from "./useShapInsights";
 export interface ShapBeeswarmPlotProps {
   shapRange: number;
   beeswarmGroups: BeeswarmGroup[];
+  t: (key: string) => string;
 }
 
 const colorForValue = (value: number): string => {
@@ -17,23 +18,25 @@ const colorForValue = (value: number): string => {
 export default function ShapBeeswarmPlot(
   props: ShapBeeswarmPlotProps,
 ): JSX.Element {
-  const { shapRange, beeswarmGroups } = props;
+  const { shapRange, beeswarmGroups, t } = props;
   const normalizedRange = shapRange || 1;
 
   return (
     <div className="space-y-3 text-[0.75rem] text-slate-600">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-500">Beeswarm Feature Spread</h4>
+        <h4 className="text-sm font-semibold text-slate-500">
+          {t("shap_beeswarm_title")}
+        </h4>
         <div className="text-[0.6rem] uppercase tracking-[0.3em] text-slate-400">
-          Neutral impact
+          {t("shap_beeswarm_neutral")}
         </div>
       </div>
       <div className="rounded-[20px] border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 shadow-sm">
         <div className="relative h-[250px] w-full rounded-[20px] bg-white px-4 py-5">
           <div className="absolute inset-y-0 left-1/2 w-px bg-slate-200" />
           <div className="absolute inset-x-0 bottom-2 flex items-center justify-between px-4 text-[0.65rem] text-slate-400">
-            <span>PROTECTIVE</span>
-            <span>RISK ELEVATING</span>
+            <span>{t("shap_beeswarm_axis_left")}</span>
+            <span>{t("shap_beeswarm_axis_right")}</span>
           </div>
           {beeswarmGroups.map((group, idx) => {
             const y = 32 + idx * 26;

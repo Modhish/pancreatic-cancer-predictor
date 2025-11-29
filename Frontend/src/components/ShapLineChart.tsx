@@ -7,6 +7,7 @@ export interface ShapLineChartProps {
   shapSummary: ShapItem[];
   shapWaterfall: WaterfallData | null;
   patientValues?: Record<string, number | string>;
+  t: (key: string) => string;
 }
 
 const POS_COLOR = "#e11d48";
@@ -25,7 +26,7 @@ interface Point {
 export default function ShapLineChart(
   props: ShapLineChartProps,
 ): JSX.Element {
-  const { shapSummary, shapWaterfall, patientValues } = props;
+  const { shapSummary, shapWaterfall, patientValues, t } = props;
 
   const points: Point[] = useMemo(() => {
     if (!shapWaterfall || !shapSummary.length) return [];
@@ -64,7 +65,7 @@ export default function ShapLineChart(
   }, [shapSummary, shapWaterfall, patientValues]);
 
   if (!points.length) {
-    return <p className="text-sm text-slate-500">SHAP details not available.</p>;
+    return <p className="text-sm text-slate-500">{t("shap_unavailable")}</p>;
   }
 
   const yValues = points.map((p) => p.y);
@@ -87,7 +88,7 @@ export default function ShapLineChart(
       (height - paddingY * 1.5);
 
   const formatDelta = (v: number) =>
-    `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)} pts`;
+    `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)} ${t("shap_line_pts")}`;
   const formatValue = (v: number | string | undefined) => {
     if (typeof v === "number" && Number.isFinite(v)) return v.toFixed(2);
     if (typeof v === "string") return v;
@@ -105,9 +106,9 @@ export default function ShapLineChart(
       <div className="flex items-center gap-2 text-slate-700">
         <LineChart className="h-4 w-4 text-blue-500" />
         <div>
-          <p className="text-sm font-semibold">SHAP Risk Trajectory</p>
+          <p className="text-sm font-semibold">{t("shap_line_title")}</p>
           <p className="text-xs text-slate-500">
-            Baseline probability to net risk with the strongest drivers annotated.
+            {t("shap_line_subtitle")}
           </p>
         </div>
       </div>
@@ -215,11 +216,11 @@ export default function ShapLineChart(
           >
             <div className="flex flex-col">
               <span className="font-semibold text-slate-800">{p.label}</span>
-              <span className="text-[0.7rem] text-slate-500">
-                Patient value: {formatValue(p.featureValue)}
-              </span>
-            </div>
-            <span
+                    <span className="text-[0.7rem] text-slate-500">
+                      {t("shap_line_patient_value")}: {formatValue(p.featureValue)}
+                    </span>
+                  </div>
+                  <span
               className={`text-xs font-semibold ${
                 p.contribution > 0
                   ? "text-rose-600"
@@ -233,11 +234,11 @@ export default function ShapLineChart(
           </div>
         ))}
         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-          Net risk after these drivers:{" "}
+          {t("shap_line_net")}:{" "}
           <span className="font-semibold text-slate-900">
             {(points[points.length - 1].y * 100).toFixed(1)}%
           </span>{" "}
-          (baseline {(points[0].y * 100).toFixed(1)}%).
+          ({t("shap_line_baseline")} {(points[0].y * 100).toFixed(1)}%).
         </div>
       </div>
     </div>

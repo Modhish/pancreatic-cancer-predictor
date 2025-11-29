@@ -109,7 +109,7 @@ export default function ShapInsightsCard(
           />
           {graphVisibility.bar && (
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <ShapBarPlot shapSummary={shapSummary} />
+              <ShapBarPlot shapSummary={shapSummary} t={t} />
             </div>
           )}
           {graphVisibility.line && (
@@ -117,6 +117,7 @@ export default function ShapInsightsCard(
               <ShapLineChart
                 shapSummary={shapSummary}
                 shapWaterfall={shapWaterfall}
+                t={t}
                 patientValues={
                   (result?.patient_values as Record<string, number | string>) ??
                   (result?.patientValues as Record<string, number | string>) ??
@@ -131,6 +132,7 @@ export default function ShapInsightsCard(
                 shapWaterfall={shapWaterfall}
                 shapRange={shapRange}
                 beeswarmGroups={beeswarmGroups}
+                t={t}
               />
             </div>
           )}
