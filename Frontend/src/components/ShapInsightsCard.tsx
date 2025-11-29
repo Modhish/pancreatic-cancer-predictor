@@ -116,6 +116,7 @@ export default function ShapInsightsCard(
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <ShapLineChart
                 shapSummary={shapSummary}
+                shapWaterfall={shapWaterfall}
                 patientValues={
                   (result?.patient_values as Record<string, number | string>) ??
                   (result?.patientValues as Record<string, number | string>) ??
