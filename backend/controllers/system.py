@@ -5,7 +5,6 @@ from datetime import datetime
 from flask import jsonify
 
 from core.constants import FEATURE_DEFAULTS, FEATURE_LABELS
-from core.settings import logger
 from services import diagnostic_system, groq_client
 from services.model_engine import FEATURE_NAMES, FEATURE_ORDER
 

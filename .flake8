@@ -1,5 +1,7 @@
 [flake8]
 max-line-length = 120
 extend-ignore = E203,W503
-exclude = .git,__pycache__,venv,Frontend
-
+exclude = .git,__pycache__,venv,backend/venv,backend/app.pycls,backend/py,Frontend,site-packages
+per-file-ignores =
+    backend/core/constants.py:E501
+    backend/guidelines.py:E501
