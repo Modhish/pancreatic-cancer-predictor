@@ -7,6 +7,7 @@ from flask import current_app, jsonify, request, send_file
 
 from core.settings import logger, rate_limit
 from services import diagnostic_system
+from services import html_report
 
 from . import api_bp
 
@@ -37,10 +38,12 @@ def download_report():
                     }
                 ),
                 400,
-            )
+        )
 
         # Normalize expected keys
         analysis = dict(analysis_data)
+        language = str(payload.get("language") or analysis.get("language") or "en").lower()
+        analysis.setdefault("language", language)
         if "ai_explanation" not in analysis and "aiExplanation" in payload:
             analysis["ai_explanation"] = payload["aiExplanation"]
         if "risk_level" not in analysis:
@@ -50,10 +53,10 @@ def download_report():
                 prob = 0.0
             analysis["risk_level"] = "High" if prob > 0.7 else "Moderate" if prob > 0.3 else "Low"
 
-        report = diagnostic_system.generate_pdf_report(patient_values, analysis)
-        report.seek(0)
+        report = html_report.generate_pdf(patient_values, analysis, language)
 
-        filename = f"diagnoai-pancreas-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
+        lang_suffix = "ru" if language.startswith("ru") else "en"
+        filename = f"diagnoai-pancreas-report-{lang_suffix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
         return send_file(
             report,
             mimetype="application/pdf",

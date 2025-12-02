@@ -3,283 +3,393 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from fpdf import FPDF
 
-from core.constants import FEATURE_DEFAULTS, FEATURE_LABELS, RU_FEATURE_LABELS
+from core.constants import FEATURE_LABELS
 from utils.text import repair_text_encoding
-from .model_engine import FEATURE_NAMES
+
+
+PALETTE = {
+    "primary": (21, 94, 239),
+    "neutral": (30, 41, 59),
+    "muted": (100, 116, 139),
+    "panel": (248, 250, 252),
+    "border": (226, 232, 240),
+}
+
+RISK_COLORS = {
+    "High": (220, 38, 38),
+    "Moderate": (217, 119, 6),
+    "Low": (22, 163, 74),
+}
+
+GUIDELINE_LINKS = [
+    ("NCCN v2.2024", "https://www.nccn.org/professionals/physician_gls/pdf/pancreatic.pdf"),
+    ("ASCO 2023", "https://ascopubs.org/doi/full/10.1200/JCO.23.00000"),
+    ("ESMO 2023", "https://www.esmo.org/guidelines/gastrointestinal-cancers/pancreatic-cancer"),
+    ("CAPS 2020", "https://gut.bmj.com/content/69/1/7"),
+    ("AGA 2020", "https://www.gastrojournal.org/article/S0016-5085(20)30094-6/fulltext"),
+]
+
+COPY = {
+    "en": {
+        "title": "DiagnoAI Pancreas | Clinical Report",
+        "generated_on": "Generated on",
+        "risk_label": "Risk level",
+        "probability_label": "Risk probability",
+        "audience_label": "Audience",
+        "language_label": "Language",
+        "overview_title": "Clinical overview",
+        "overview": {
+            "High": "High-risk pattern detected. Confirm within 7 days (contrast CT/MRI, EUS-FNA if needed) and manage pain/obstruction in parallel.",
+            "Moderate": "Intermediate probability. Clarify in 2–4 weeks with pancreatic protocol imaging, tumor markers, and symptom-guided follow-up.",
+            "Low": "Low risk estimate. Maintain surveillance, reinforce prevention, and define clear triggers for earlier reassessment.",
+        },
+        "labs_title": "Laboratory snapshot",
+        "labs_caption": "Values shown as provided; verify units with the source laboratory.",
+        "shap_title": "Top SHAP drivers",
+        "shap_none": "SHAP analysis unavailable.",
+        "impact_labels": {
+            "positive": "raises risk",
+            "negative": "reduces risk pressure",
+            "neutral": "neutral influence",
+        },
+        "commentary_title": "AI clinical commentary",
+        "commentary_empty": "AI commentary is not available for this audience.",
+        "actions_title": "Priority next steps",
+        "actions": {
+            "High": [
+                "Order contrast-enhanced CT or MRI within 7 days; add EUS-FNA if imaging is equivocal.",
+                "Trend tumor markers (CA 19-9, CEA) plus metabolic/coagulation panels.",
+                "Manage pain, nutrition, and biliary obstruction in parallel to diagnostics.",
+                "Engage hepatobiliary surgery and oncology early for joint planning.",
+            ],
+            "Moderate": [
+                "Schedule pancreatic protocol CT or MRI in 2–4 weeks based on symptoms.",
+                "Repeat labs and tumor markers sooner if values drift from baseline.",
+                "Document red-flag symptoms and provide expedited return precautions.",
+                "Coordinate follow-up with gastroenterology and primary care.",
+            ],
+            "Low": [
+                "Maintain routine surveillance; advance imaging if new symptoms emerge.",
+                "Reinforce lifestyle risk reduction and metabolic control.",
+                "Educate on warning signs that justify earlier clinical review.",
+            ],
+        },
+        "guideline_title": "Guideline references",
+        "footer": "AI-assisted decision support. Interpret alongside full clinical context and governing medical guidelines.",
+        "client_labels": {
+            "patient": "Patient",
+            "clinician": "Clinician",
+            "doctor": "Clinician",
+            "physician": "Clinician",
+        },
+        "language_names": {"en": "English", "ru": "Russian"},
+    },
+    "ru": {
+        "title": "DiagnoAI Pancreas | Клинический отчёт",
+        "generated_on": "Дата формирования",
+        "risk_label": "Уровень риска",
+        "probability_label": "Вероятность риска",
+        "audience_label": "Целевая аудитория",
+        "language_label": "Язык",
+        "overview_title": "Клиническое резюме",
+        "overview": {
+            "High": "Обнаружен высокий риск. Подтвердите диагноз в течение 7 дней: контрастная КТ/МРТ, EUS-FNA при неопределённом изображении, параллельно контролируйте желчную обструкцию и боль.",
+            "Moderate": "Умеренная вероятность. Уточните в ближайшие 2–4 недели с помощью КТ/МРТ по протоколу поджелудочной, онкомаркеров и симптом-ориентированного наблюдения.",
+            "Low": "Низкая оценка риска. Поддерживайте наблюдение, усиливайте профилактику и заранее определите признаки для более раннего пересмотра.",
+        },
+        "labs_title": "Лабораторный срез",
+        "labs_caption": "Значения приведены в исходных единицах; сверяйте с лабораторией.",
+        "shap_title": "Ключевые факторы SHAP",
+        "shap_none": "SHAP-анализ недоступен.",
+        "impact_labels": {
+            "positive": "повышает риск",
+            "negative": "снижает риск",
+            "neutral": "нейтрально",
+        },
+        "commentary_title": "Клинический комментарий ИИ",
+        "commentary_empty": "Комментарий недоступен для выбранной аудитории.",
+        "actions_title": "Приоритетные шаги",
+        "actions": {
+            "High": [
+                "Провести контрастную КТ или МРТ в течение 7 дней; при неопределённости — EUS-FNA.",
+                "Отслеживать онкомаркеры (CA 19-9, CEA) и ключевые метаболические показатели.",
+                "Параллельно вести обезболивание, питание и коррекцию желчной обструкции.",
+                "Подключить хирурга-гепатобилиара, онколога и генетика для совместного плана.",
+            ],
+            "Moderate": [
+                "Запланировать КТ/МРТ по протоколу поджелудочной в течение 2–4 недель по тяжести симптомов.",
+                "Повторить лабораторные показатели раньше при отклонении от базовых значений.",
+                "Фиксировать тревожные симптомы и дать пациенту быстрые маршруты возврата.",
+                "Скоординировать наблюдение с гастроэнтерологом и врачом первичного звена.",
+            ],
+            "Low": [
+                "Сохранять обычный график наблюдения; ускорить обследование при новых симптомах.",
+                "Укреплять профилактику и контроль метаболических факторов.",
+                "Обучить признакам, требующим более ранней консультации.",
+            ],
+        },
+        "guideline_title": "Клинические рекомендации",
+        "footer": "Система поддержки решений на базе ИИ. Окончательные решения принимает лечащий врач.",
+        "client_labels": {
+            "patient": "Пациент",
+            "clinician": "Врач/клинический специалист",
+            "doctor": "Врач",
+            "physician": "Врач",
+        },
+        "language_names": {"en": "Английский", "ru": "Русский"},
+    },
+}
+
+
+def _ensure_unicode_font(pdf: FPDF) -> Tuple[str, bool]:
+    """Load DejaVu font if available so Cyrillic renders correctly."""
+    fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
+    ttf_path = os.path.join(fonts_dir, "DejaVuSans.ttf")
+    try:
+        if os.path.exists(ttf_path):
+            pdf.add_font("DejaVu", "", ttf_path, uni=True)
+            pdf.add_font("DejaVu", "B", ttf_path, uni=True)
+            pdf.add_font("DejaVu", "I", ttf_path, uni=True)
+            return "DejaVu", True
+    except Exception:
+        pass
+    return "Helvetica", False
+
+
+def _safe(text: Any, unicode_ready: bool) -> str:
+    s = "" if text is None else str(text)
+    if unicode_ready:
+        return s
+    return s.encode("latin-1", "replace").decode("latin-1")
+
+
+def _normalize_risk(risk: Any, probability: float) -> str:
+    raw = str(risk or "").lower()
+    if "high" in raw:
+        return "High"
+    if "moderate" in raw or "medium" in raw:
+        return "Moderate"
+    if "low" in raw:
+        return "Low"
+    if probability > 0.7:
+        return "High"
+    if probability > 0.3:
+        return "Moderate"
+    return "Low"
+
 
 def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
-        """Create a polished PDF report summarizing the diagnostic analysis."""
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=18)
-        pdf.add_page()
+    """Create a professional bilingual PDF report summarizing the diagnostic analysis."""
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=16)
+    pdf.add_page()
 
-        content_width = pdf.w - pdf.l_margin - pdf.r_margin
-        language = (analysis.get('language') or 'en').upper()
-        client_type = str(analysis.get('client_type') or 'patient').title()
-        ru = language.startswith('RU')
+    font_family, unicode_ready = _ensure_unicode_font(pdf)
+    pdf.set_font(font_family, "B", 14)
+    content_width = pdf.w - pdf.l_margin - pdf.r_margin
 
-        header_height = 24
-        x0 = pdf.l_margin
-        y0 = pdf.get_y()
-        pdf.set_fill_color(23, 94, 201)
-        pdf.set_draw_color(23, 94, 201)
-        pdf.rect(x0, y0, content_width, header_height, 'F')
+    language_code = str(analysis.get("language") or "en").lower()
+    locale = "ru" if language_code.startswith("ru") else "en"
+    copy = COPY.get(locale, COPY["en"])
 
-        # Unicode-capable font setup (optional). If DejaVuSans.ttf is present
-        # at backend/fonts/DejaVuSans.ttf, use it to allow Cyrillic output.
-        def _pdf_ensure_unicode_font(p: FPDF) -> bool:
-            try:
-                fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
-                ttf_path = os.path.join(fonts_dir, 'DejaVuSans.ttf')
-                if os.path.exists(ttf_path):
-                    p.add_font('DejaVu', '', ttf_path, uni=True)
-                    return True
-            except Exception:
-                pass
-            return False
+    client_type = str(analysis.get("client_type") or "patient").lower()
+    client_display = copy["client_labels"].get(client_type, client_type.title())
 
-        unicode_ok = _pdf_ensure_unicode_font(pdf)
+    try:
+        probability_pct = float(analysis.get("probability", 0) or 0) * 100
+    except (TypeError, ValueError):
+        probability_pct = 0.0
+    risk_level = _normalize_risk(analysis.get("risk_level"), probability_pct / 100.0)
+    risk_color = RISK_COLORS.get(risk_level, PALETTE["primary"])
 
-        def _safe(txt: Any) -> str:
-            s = str(txt) if txt is not None else ''
-            return s if unicode_ok else s.encode('latin-1', 'ignore').decode('latin-1')
+    # Header
+    pdf.set_fill_color(*PALETTE["primary"])
+    pdf.set_draw_color(*PALETTE["primary"])
+    header_height = 26
+    x0 = pdf.l_margin
+    y0 = pdf.get_y()
+    pdf.rect(x0, y0, content_width, header_height, "F")
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_xy(x0 + 6, y0 + 6)
+    pdf.cell(0, 8, _safe(copy["title"], unicode_ready), ln=True)
+    pdf.set_x(x0 + 6)
+    pdf.set_font(font_family, "", 10)
+    pdf.cell(0, 6, _safe(f'{copy["generated_on"]}: {datetime.now().strftime("%Y-%m-%d %H:%M")}', unicode_ready), ln=True)
 
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_xy(x0 + 6, y0 + 6)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 16)
-        else:
-            pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 8, _safe("Отчёт DiagnoAI" if ru else "DiagnoAI Clinical Intelligence Report"), ln=True)
-        pdf.set_x(x0 + 6)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 10)
-        else:
-            pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 6, _safe(("Сформировано " if ru else "Generated ") + datetime.now().strftime('%Y-%m-%d %H:%M:%S')), ln=True)
+    pdf.set_y(y0 + header_height + 8)
+    pdf.set_text_color(*PALETTE["neutral"])
 
-        pdf.set_y(y0 + header_height + 6)
-        pdf.set_text_color(30, 41, 59)
+    cards = [
+        (copy["risk_label"], copy["risk_names"].get(risk_level, risk_level), risk_color),
+        (copy["probability_label"], f"{probability_pct:.1f}%", PALETTE["primary"]),
+        (copy["audience_label"], f"{client_display} | {copy['language_names'].get(locale, locale)}", PALETTE["neutral"]),
+    ]
+    card_gap = 4
+    card_width = (content_width - card_gap * (len(cards) - 1)) / len(cards)
+    card_height = 26
+    card_y = pdf.get_y()
 
-        prediction_flag = analysis.get('prediction', 0)
-        risk_level = (analysis.get('risk_level') or 'N/A')
+    for idx, (label, value, accent) in enumerate(cards):
+        card_x = pdf.l_margin + idx * (card_width + card_gap)
+        pdf.set_xy(card_x, card_y)
+        pdf.set_fill_color(*PALETTE["panel"])
+        pdf.set_draw_color(*PALETTE["border"])
+        pdf.rect(card_x, card_y, card_width, card_height, "DF")
+
+        pdf.set_xy(card_x + 5, card_y + 4)
+        pdf.set_font(font_family, "", 9)
+        pdf.set_text_color(*PALETTE["muted"])
+        pdf.cell(card_width - 10, 5, _safe(label.upper(), unicode_ready))
+
+        pdf.set_xy(card_x + 5, card_y + 12)
+        pdf.set_font(font_family, "B", 12)
+        pdf.set_text_color(*accent)
+        pdf.multi_cell(card_width - 10, 6, _safe(value, unicode_ready))
+
+    pdf.set_y(card_y + card_height + 8)
+
+    # Overview
+    pdf.set_font(font_family, "B", 12)
+    pdf.set_fill_color(239, 246, 255)
+    pdf.cell(0, 9, _safe(copy["overview_title"], unicode_ready), ln=True, fill=True)
+    pdf.ln(1)
+    pdf.set_font(font_family, "", 11)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.multi_cell(content_width, 6, _safe(copy["overview"].get(risk_level, ""), unicode_ready))
+    pdf.ln(2)
+
+    # Labs
+    pdf.set_font(font_family, "B", 12)
+    pdf.set_fill_color(241, 245, 249)
+    pdf.cell(0, 9, _safe(copy["labs_title"], unicode_ready), ln=True, fill=True)
+    pdf.set_font(font_family, "", 10.5)
+    pdf.set_text_color(*PALETTE["neutral"])
+
+    feature_order = [
+        "wbc",
+        "rbc",
+        "plt",
+        "hgb",
+        "hct",
+        "mpv",
+        "pdw",
+        "mono",
+        "baso_abs",
+        "baso_pct",
+        "glucose",
+        "act",
+        "bilirubin",
+    ]
+    label_map = FEATURE_LABELS.get(locale, FEATURE_LABELS["en"])
+    rows: list[tuple[str, str]] = []
+    for key in feature_order:
+        label = label_map.get(key.upper(), key.upper())
+        raw_value = patient_inputs.get(key)
         try:
-            probability_pct = float(analysis.get('probability', 0)) * 100
+            value = f"{float(raw_value):.2f}"
         except (TypeError, ValueError):
-            probability_pct = 0.0
+            value = "N/A" if raw_value is None else str(raw_value)
+        rows.append((label, value))
 
-        prediction_text = (
-            "Высокий риск — требуется доп. обследование" if prediction_flag and ru
-            else ("Низкий риск" if (not prediction_flag and ru) else (
-                "High Risk - Further Evaluation Recommended" if prediction_flag else "Low Risk Assessment"
-            ))
-        )
-        risk_palette = {
-            'High': (220, 38, 38),
-            'Moderate': (217, 119, 6),
-            'Low': (22, 163, 74)
-        }
-        risk_color = risk_palette.get(risk_level, (37, 99, 235))
-
-        cards = [
-            (_safe("Уровень риска" if ru else "Risk Level"), risk_level.upper(), risk_color),
-            (_safe("Вероятность" if ru else "Probability"), f"{probability_pct:.1f}%", (37, 99, 235)),
-            (_safe("Аудитория" if ru else "Audience"), f"{client_type} | {language}", (30, 41, 59))
-        ]
-
-        card_gap = 4
-        card_width = (content_width - (card_gap * (len(cards) - 1))) / len(cards)
-        card_height = 22
-        card_y = pdf.get_y()
-        for idx, (label, value, accent) in enumerate(cards):
-            card_x = pdf.l_margin + idx * (card_width + card_gap)
-            pdf.set_xy(card_x, card_y)
-            pdf.set_fill_color(248, 250, 255)
-            pdf.set_draw_color(226, 232, 240)
-            pdf.rect(card_x, card_y, card_width, card_height, 'DF')
-
-            pdf.set_xy(card_x + 4, card_y + 4)
-            if unicode_ok:
-                pdf.set_font('DejaVu', '', 9)
+    row_height = 8
+    row_fill = False
+    for idx in range(0, len(rows), 2):
+        fill_color = (248, 250, 252) if row_fill else (255, 255, 255)
+        pdf.set_fill_color(*fill_color)
+        for col_idx in range(2):
+            width = content_width / 2
+            if col_idx < len(rows[idx : idx + 2]):
+                label, value = rows[idx + col_idx]
+                text_line = f"{label}: {value}"
             else:
-                pdf.set_font("Helvetica", "B", 9)
-            pdf.set_text_color(100, 116, 139)
-            pdf.cell(card_width - 8, 4, _safe(label.upper()))
-            pdf.set_xy(card_x + 4, card_y + 10)
-            if unicode_ok:
-                pdf.set_font('DejaVu', '', 12)
-            else:
-                pdf.set_font("Helvetica", "B", 12)
-            pdf.set_text_color(*accent)
-            pdf.multi_cell(card_width - 8, 6, _safe(value))
+                text_line = ""
+            pdf.cell(width, row_height, _safe(text_line, unicode_ready), ln=0 if col_idx == 0 else 1, fill=True)
+        row_fill = not row_fill
 
-        pdf.set_y(card_y + card_height + 8)
-        pdf.set_text_color(30, 41, 59)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 11)
-        else:
-            pdf.set_font("Helvetica", "", 11)
-        para = (
-            f"Заключение: {prediction_text}. Эта сводка объединяет лабораторные показатели, объяснимость SHAP и комментарий ИИ для поддержки решения."
-            if ru else
-            f"Prediction: {prediction_text}. This assessment combines laboratory analytics, SHAP explainability, and AI commentary to support clinical decision-making."
-        )
-        pdf.multi_cell(content_width, 6, _safe(para))
-        pdf.ln(2)
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.set_font(font_family, "I", 9)
+    pdf.ln(1)
+    pdf.multi_cell(content_width, 5, _safe(copy["labs_caption"], unicode_ready))
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.ln(2)
 
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 13)
-        else:
-            pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 9, _safe("Лабораторные данные" if ru else "Laboratory Snapshot"), ln=True)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 10.5)
-        else:
-            pdf.set_font("Helvetica", "", 10.5)
-
-        feature_keys = ['wbc', 'rbc', 'plt', 'hgb', 'hct', 'mpv', 'pdw', 'mono', 'baso_abs', 'baso_pct', 'glucose', 'act', 'bilirubin']
-        label_lang = 'ru' if str(analysis.get('language', 'en')).lower().startswith('ru') else 'en'
-        lab_rows: list[tuple[str, str]] = []
-        for key, label in zip(feature_keys, FEATURE_NAMES):
-            raw_value = patient_inputs.get(key)
+    # SHAP
+    pdf.set_font(font_family, "B", 12)
+    pdf.set_fill_color(241, 245, 249)
+    pdf.cell(0, 9, _safe(copy["shap_title"], unicode_ready), ln=True, fill=True)
+    pdf.set_font(font_family, "", 11)
+    shap_values = analysis.get("shap_values") or analysis.get("shapValues") or []
+    impact_labels = copy["impact_labels"]
+    if shap_values:
+        for idx, item in enumerate(shap_values[:5], start=1):
+            feature = str(item.get("feature", "Unknown"))
+            label = label_map.get(feature.upper(), feature)
+            impact = impact_labels.get(str(item.get("impact", "neutral")).lower(), impact_labels["neutral"])
+            val = item.get("value", 0)
             try:
-                formatted_value = f"{float(raw_value):.2f}"
+                val_str = f"{float(val):+.3f}"
             except (TypeError, ValueError):
-                formatted_value = 'N/A' if raw_value is None else str(raw_value)
-            lab_rows.append((label, formatted_value))
+                val_str = str(val)
+            line = f"{idx}. {label} ({impact}): {val_str}"
+            pdf.multi_cell(content_width, 6, _safe(line, unicode_ready))
+    else:
+        pdf.multi_cell(content_width, 6, _safe(copy["shap_none"], unicode_ready))
+    pdf.ln(2)
 
-        row_fill = False
-        row_height = 8
-        for idx in range(0, len(lab_rows), 2):
-            cells = lab_rows[idx:idx + 2]
-            fill_color = (248, 250, 252) if row_fill else (255, 255, 255)
-            pdf.set_fill_color(*fill_color)
-            for col_idx in range(2):
-                cell_width = content_width / 2
-                if col_idx < len(cells):
-                    label, value = cells[col_idx]
-                    text = f"{label}: {value}"
-                else:
-                    text = ""
-                pdf.cell(cell_width, row_height, _safe(text), border=0, ln=0 if col_idx == 0 else 1, fill=True)
-            row_fill = not row_fill
+    # Commentary
+    commentary = analysis.get("ai_explanation") or analysis.get("aiExplanation") or ""
+    commentary = repair_text_encoding(commentary or "")
+    pdf.set_font(font_family, "B", 12)
+    pdf.set_fill_color(239, 246, 255)
+    pdf.cell(0, 9, _safe(copy["commentary_title"], unicode_ready), ln=True, fill=True)
+    pdf.set_font(font_family, "", 10.5)
+    if commentary.strip():
+        pdf.set_fill_color(250, 253, 255)
+        pdf.set_text_color(45, 55, 72)
+        for paragraph in [p.strip() for p in commentary.split("\n") if p.strip()]:
+            pdf.multi_cell(content_width, 6, _safe(paragraph, unicode_ready), fill=True)
+            pdf.ln(1)
+        pdf.set_text_color(*PALETTE["neutral"])
+    else:
+        pdf.set_text_color(*PALETTE["neutral"])
+        pdf.multi_cell(content_width, 6, _safe(copy["commentary_empty"], unicode_ready))
+    pdf.ln(2)
+
+    # Actions
+    actions = copy["actions"].get(risk_level, [])
+    if actions:
+        pdf.set_font(font_family, "B", 12)
+        pdf.set_fill_color(241, 245, 249)
+        pdf.cell(0, 9, _safe(copy["actions_title"], unicode_ready), ln=True, fill=True)
+        pdf.set_font(font_family, "", 10.5)
+        pdf.set_text_color(*PALETTE["neutral"])
+        for action in actions:
+            pdf.cell(4, 6, _safe("•", unicode_ready), ln=0)
+            pdf.multi_cell(content_width - 6, 6, _safe(action, unicode_ready))
         pdf.ln(2)
 
-        shap_values = analysis.get('shap_values') or analysis.get('shapValues') or []
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 13)
-        else:
-            pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 9, _safe("Ключевые факторы SHAP" if ru else "Key SHAP Drivers"), ln=True)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 11)
-        else:
-            pdf.set_font("Helvetica", "", 11)
-        if shap_values:
-            for idx, item in enumerate(shap_values[:5], start=1):
-                feature = str(item.get('feature', 'Unknown'))
-                label = FEATURE_LABELS.get(label_lang, FEATURE_LABELS['en']).get(feature.upper(), feature)
-                impact = str(item.get('impact', 'neutral')).lower()
-                value = item.get('value', 0)
-                try:
-                    value_str = f"{float(value):+.3f}"
-                except (TypeError, ValueError):
-                    value_str = str(value)
-                pdf.multi_cell(content_width, 6, _safe(f"{idx}. {label} ({impact}): {value_str}"))
-        else:
-            pdf.multi_cell(content_width, 6, _safe("SHAP‑анализ недоступен." if ru else "SHAP analysis unavailable."))
-        pdf.ln(2)
+    # Guidelines
+    pdf.set_font(font_family, "B", 12)
+    pdf.set_fill_color(239, 246, 255)
+    pdf.cell(0, 9, _safe(copy["guideline_title"], unicode_ready), ln=True, fill=True)
+    pdf.set_font(font_family, "", 10)
+    pdf.set_text_color(37, 99, 235)
+    for label, url in GUIDELINE_LINKS:
+        pdf.cell(5, 6, _safe("-", unicode_ready), ln=0)
+        pdf.cell(0, 6, _safe(label, unicode_ready), ln=1, link=url)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.ln(2)
 
-        commentary = analysis.get('ai_explanation') or analysis.get('aiExplanation') or ''
-        if commentary:
-            if unicode_ok:
-                pdf.set_font('DejaVu', '', 13)
-            else:
-                pdf.set_font("Helvetica", "B", 13)
-            pdf.cell(0, 9, _safe("Клинический анализ ИИ" if ru else "AI Clinical Commentary"), ln=True)
-            if unicode_ok:
-                pdf.set_font('DejaVu', '', 10.5)
-            else:
-                pdf.set_font("Helvetica", "", 10.5)
-            pdf.set_fill_color(250, 253, 255)
-            pdf.set_text_color(45, 55, 72)
-            for paragraph in [segment.strip() for segment in commentary.split('\n') if segment.strip()]:
-                pdf.multi_cell(content_width, 6, _safe(paragraph), border=0, fill=True)
-                pdf.ln(1)
-            pdf.set_text_color(30, 41, 59)
-            pdf.ln(2)
+    # Footer
+    pdf.set_font(font_family, "I", 9)
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.multi_cell(content_width, 5, _safe(copy["footer"], unicode_ready))
 
-        guideline_links = [
-            ("NCCN v2.2024", "https://www.nccn.org/professionals/physician_gls/pdf/pancreatic.pdf"),
-            ("ASCO 2023", "https://ascopubs.org/doi/full/10.1200/JCO.23.00000"),
-            ("ESMO 2023", "https://www.esmo.org/guidelines/gastrointestinal-cancers/pancreatic-cancer"),
-            ("CAPS 2020", "https://gut.bmj.com/content/69/1/7"),
-            ("AGA 2020", "https://www.gastrojournal.org/article/S0016-5085(20)30094-6/fulltext")
-        ]
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 12)
-        else:
-            pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, _safe("Ссылки на рекомендации" if ru else "Guideline References"), ln=True)
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 10)
-        else:
-            pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(37, 99, 235)
-        bullet = '-'
-        for label, url in guideline_links:
-            pdf.cell(6, 6, _safe(bullet), ln=0)
-            pdf.cell(0, 6, _safe(label), ln=1, link=url)
-        pdf.set_text_color(30, 41, 59)
-        pdf.ln(2)
-
-        if unicode_ok:
-            pdf.set_font('DejaVu', '', 9)
-        else:
-            pdf.set_font("Helvetica", "I", 9)
-        pdf.set_text_color(100, 116, 139)
-        pdf.multi_cell(
-            content_width,
-            5,
-            _safe(
-                "DiagnoAI Pancreas — инструмент поддержки скрининга. Интерпретируйте с учётом клинического контекста и действующих рекомендаций."
-                if ru else
-                "DiagnoAI Pancreas provides AI-assisted screening support. Interpret alongside full clinical context and governing medical guidelines."
-            )
-        )
-
-        # FPDF returns a string in Python 3 when dest='S'; encode to bytes explicitly
-        pdf_bytes = pdf.output(dest='S').encode('latin-1')
-        buffer = BytesIO(pdf_bytes)
-        buffer.seek(0)
-        return buffer
-
-
-
-# Bind top-level functions back to the class to maintain API
-
-
-# Clean Russian locale and labels override (ensures RU works correctly)
-FEATURE_LABELS['ru_old_1'] = {
-    'WBC': 'Ð›ÐµÐ¹ÐºÐ¾Ñ†Ð¸Ñ‚Ñ‹',
-    'RBC': 'Ð­Ñ€Ð¸Ñ‚Ñ€Ð¾Ñ†Ð¸Ñ‚Ñ‹',
-    'PLT': 'Ð¢Ñ€Ð¾Ð¼Ð±Ð¾Ñ†Ð¸Ñ‚Ñ‹',
-    'HGB': 'Ð“ÐµÐ¼Ð¾Ð³Ð»Ð¾Ð±Ð¸Ð½',
-    'HCT': 'Ð“ÐµÐ¼Ð°Ñ‚Ð¾ÐºÑ€Ð¸Ñ‚',
-    'MPV': 'Ð¡Ñ€ÐµÐ´Ð½Ð¸Ð¹ Ð¾Ð±ÑŠÐµÐ¼ Ñ‚Ñ€Ð¾Ð¼Ð±Ð¾Ñ†Ð¸Ñ‚Ð¾Ð²',
-    'PDW': 'Ð¨Ð¸Ñ€Ð¸Ð½Ð° Ñ€Ð°ÑÐ¿Ñ€ÐµÐ´ÐµÐ»ÐµÐ½Ð¸Ñ Ñ‚Ñ€Ð¾Ð¼Ð±Ð¾Ñ†Ð¸Ñ‚Ð¾Ð²',
-    'MONO': 'ÐœÐ¾Ð½Ð¾Ñ†Ð¸Ñ‚Ñ‹',
-    'BASO_ABS': 'Ð‘Ð°Ð·Ð¾Ñ„Ð¸Ð»Ñ‹ (Ð°Ð±Ñ.)',
-    'BASO_PCT': 'Ð‘Ð°Ð·Ð¾Ñ„Ð¸Ð»Ñ‹ (%)',
-    'GLUCOSE': 'Ð“Ð»ÑŽÐºÐ¾Ð·Ð°',
-    'ACT': 'ÐÐºÑ‚Ð¸Ð²Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ð¾Ðµ Ð²Ñ€ÐµÐ¼Ñ ÑÐ²ÐµÑ€Ñ‚Ñ‹Ð²Ð°Ð½Ð¸Ñ',
-    'BILIRUBIN': 'ÐžÐ±Ñ‰Ð¸Ð¹ Ð±Ð¸Ð»Ð¸Ñ€ÑƒÐ±Ð¸Ð½',
-}
-# RU feature label alias (final mapping is defined later)
-# RU_FEATURE_LABELS = FEATURE_LABELS['ru']
-
-# Deprecated duplicated RU mapping (superseded later)
+    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    buffer = BytesIO(pdf_bytes)
+    buffer.seek(0)
+    return buffer

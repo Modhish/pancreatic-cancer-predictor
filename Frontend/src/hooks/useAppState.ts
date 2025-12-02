@@ -409,7 +409,8 @@ export default function useAppState(): UseAppState {
       const link = document.createElement("a");
       link.href = url;
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      link.download = `diagnoai-pancreas-report-${timestamp}.pdf`;
+      const langSuffix = String(language || "en").toLowerCase();
+      link.download = `diagnoai-pancreas-report-${langSuffix}-${timestamp}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

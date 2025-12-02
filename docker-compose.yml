@@ -7,7 +7,7 @@ services:
     environment:
       - FLASK_DEBUG=False
       - PORT=5000
-      - GROQ_API_KEY=
+      - GROQ_API_KEY= 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
     ports:
       - "5000:5000"
   frontend:

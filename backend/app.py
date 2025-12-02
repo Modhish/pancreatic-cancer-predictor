@@ -16,6 +16,9 @@ from controllers import register_routes
 
 register_routes(app)
 
+# Configure template folder explicitly (ensures Jinja finds backend/templates)
+app.template_folder = os.path.join(os.path.dirname(__file__), "templates")
+
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
