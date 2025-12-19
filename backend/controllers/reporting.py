@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import traceback
 from datetime import datetime
 
@@ -53,7 +54,17 @@ def download_report():
                 prob = 0.0
             analysis["risk_level"] = "High" if prob > 0.7 else "Moderate" if prob > 0.3 else "Low"
 
-        report = html_report.generate_pdf(patient_values, analysis, language)
+        pdf_renderer = os.getenv("PDF_RENDERER", "fpdf").lower()
+
+        report = None
+        if pdf_renderer != "fpdf":
+            try:
+                report = html_report.generate_pdf(patient_values, analysis, language)
+            except Exception as exc:
+                logger.warning("Playwright PDF failed (%s); falling back to FPDF renderer", exc)
+
+        if report is None:
+            report = diagnostic_system.generate_pdf_report(patient_values, analysis)
 
         lang_suffix = "ru" if language.startswith("ru") else "en"
         filename = f"diagnoai-pancreas-report-{lang_suffix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"

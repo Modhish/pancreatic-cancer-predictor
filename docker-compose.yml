@@ -3,26 +3,56 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    command: flask run --host=0.0.0.0 --port=5000 --reload
     environment:
-      FLASK_DEBUG: "True"
+      FLASK_APP: app.py
+      FLASK_DEBUG: "1"
+      PYTHONPATH: /app
       PORT: "5000"
-      GROQ_API_KEY: "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"
+      PDF_RENDERER: fpdf
+      GROQ_API_KEY: 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
+    env_file:
+      - .env
     ports:
       - "5000:5000"
     volumes:
       - ./backend:/app
+    develop:
+      watch:
+        - path: ./backend
+          target: /app
+          action: sync
+        - path: backend/requirements.txt
+          action: rebuild
 
   frontend:
     build:
       context: .
       dockerfile: Frontend/Dockerfile
-    ports:
-      - "5173:5173"
+      target: dev
+    command: npm run dev -- --host 0.0.0.0 --port 5173
     depends_on:
       - backend
+    environment:
+      # adjust to your API host/port as needed
+      VITE_BACKEND_URL: http://localhost:5000
+    ports:
+      - "5173:5173"
     volumes:
       - ./Frontend:/app
       - frontend_node_modules:/app/node_modules
+    develop:
+      watch:
+        - path: ./Frontend
+          target: /app
+          action: sync
+          ignore:
+            - node_modules/
+            - dist/
+        - path: Frontend/package.json
+          action: rebuild
+        - path: Frontend/package-lock.json
+          action: rebuild
 
 volumes:
   frontend_node_modules:
