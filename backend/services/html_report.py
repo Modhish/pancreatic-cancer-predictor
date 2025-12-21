@@ -202,7 +202,13 @@ def _build_context(patient_inputs: Dict[str, Any], analysis: Dict[str, Any], lan
             range_text = ""
         labs.append({"label": label, "value": value, "range": range_text})
 
-    shap_values = analysis.get("shap_values") or analysis.get("shapValues") or []
+    raw_shap = analysis.get("shap_values") or analysis.get("shapValues") or []
+    if isinstance(raw_shap, dict):
+        shap_values = [raw_shap]
+    elif isinstance(raw_shap, (list, tuple)):
+        shap_values = list(raw_shap)
+    else:
+        shap_values = []
     impact_map = copy["impact_labels"]
     shap = []
     for item in shap_values[:5]:

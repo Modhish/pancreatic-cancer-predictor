@@ -8,7 +8,9 @@ WORKDIR /app
 # System packages needed for Playwright/Chromium headless PDF rendering
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         ca-certificates \
+        fonts-dejavu-core \
         fonts-liberation \
         libasound2 \
         libatk-bridge2.0-0 \
@@ -39,7 +41,8 @@ RUN apt-get update \
 # Install Python dependencies first (leverages Docker layer cache)
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r /tmp/requirements.txt
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && python -m playwright install chromium
 
 # Copy backend source code
 COPY backend/ /app/
@@ -48,7 +51,8 @@ COPY backend/ /app/
 ENV FLASK_APP=app.py \
     FLASK_DEBUG=0 \
     PORT=5000 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PDF_RENDERER=fpdf
 
 EXPOSE 5000
 

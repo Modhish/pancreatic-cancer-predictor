@@ -114,3 +114,19 @@ def test_commentary_and_report(client):
     )
     assert r3.status_code == 200
     assert r3.headers.get("Content-Type", "").startswith("application/pdf")
+
+
+def test_report_handles_object_shap(client):
+    """Ensure shap_values supplied as an object does not break PDF generation."""
+    payload = {
+        "patient": {"wbc": 5.8, "rbc": 4.0},
+        "analysis": {
+            "probability": 0.4,
+            "risk_level": "Moderate",
+            "language": "en",
+            "shap_values": {"feature": "wbc", "value": 0.12, "impact": "positive"},
+        },
+    }
+    resp = client.post("/api/report", data=json.dumps(payload), content_type="application/json")
+    assert resp.status_code == 200
+    assert resp.headers.get("Content-Type", "").startswith("application/pdf")

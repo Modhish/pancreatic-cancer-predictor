@@ -13,8 +13,11 @@ from services import html_report
 from . import api_bp
 
 
+PDF_RATE_LIMIT = os.getenv("PDF_RATE_LIMIT", "60/minute")
+
+
 @api_bp.route("/report", methods=["POST"])
-@rate_limit("10/minute")
+@rate_limit(PDF_RATE_LIMIT)
 def download_report():
     """Generate a PDF report that summarizes the diagnostic results."""
     try:
