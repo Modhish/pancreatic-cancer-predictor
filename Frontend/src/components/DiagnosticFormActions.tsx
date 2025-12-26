@@ -1,5 +1,5 @@
 import React from "react";
-import { Activity, Loader2, Lock, X } from "lucide-react";
+import { Activity, Loader2, X } from "lucide-react";
 
 export interface DiagnosticFormActionsProps {
   loading: boolean;
@@ -44,10 +44,6 @@ export default function DiagnosticFormActions(
         </button>
       </div>
 
-      <p className="text-[0.7rem] text-slate-400 max-w-xs flex items-center gap-1">
-        <Lock className="h-3.5 w-3.5" />
-        {t("disclaimer_text")}
-      </p>
     </div>
   );
 }

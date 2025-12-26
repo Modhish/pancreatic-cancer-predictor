@@ -7,8 +7,20 @@ import Footer from "./Footer";
 import ErrorBoundary from "./ErrorBoundary";
 import DiagnosticTool from "./DiagnosticTool";
 import useAppState from "../hooks/useAppState";
+import { useEffect, useState } from "react";
 
 export default function App(): JSX.Element {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("theme");
+      if (saved === "dark" || saved === "light") return saved;
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        return "dark";
+      }
+    }
+    return "light";
+  });
+
   const {
     currentSection,
     setCurrentSection,
@@ -33,6 +45,14 @@ export default function App(): JSX.Element {
     handleDownload,
     handleClear,
   } = useAppState();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", theme);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("theme", theme);
+    }
+  }, [theme]);
 
   const renderSection = (): JSX.Element => {
     switch (currentSection) {
@@ -75,7 +95,7 @@ export default function App(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 transition-colors" dir="ltr">
+    <div className="app-shell min-h-screen text-[var(--text)] transition-colors" dir="ltr">
       <Navigation
         currentSection={currentSection}
         setCurrentSection={setCurrentSection}
@@ -83,6 +103,8 @@ export default function App(): JSX.Element {
         setMobileMenuOpen={setMobileMenuOpen}
         language={language}
         setLanguage={setLanguage}
+        theme={theme}
+        setTheme={setTheme}
         t={t}
       />
 

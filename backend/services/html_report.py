@@ -137,19 +137,26 @@ COPY = {
 
 def _load_font_face_css() -> str:
     fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
-    ttf_path = os.path.join(fonts_dir, "DejaVuSans.ttf")
-    if not os.path.exists(ttf_path):
-        return ""
-    with open(ttf_path, "rb") as f:
-        encoded = base64.b64encode(f.read()).decode("ascii")
-    return (
-        "@font-face { font-family: 'DejaVu'; "
-        "src: url('data:font/ttf;base64," + encoded + "') format('truetype'); "
-        "font-weight: 400; font-style: normal; }\n"
-        "@font-face { font-family: 'DejaVu'; "
-        "src: url('data:font/ttf;base64," + encoded + "') format('truetype'); "
-        "font-weight: 700; font-style: normal; }"
-    )
+    font_options = [
+        ("Times New Roman", ["TimesNewRoman.ttf", "Times New Roman.ttf", "times.ttf"]),
+        ("DejaVu", ["DejaVuSans.ttf"]),  # legacy fallback if Times New Roman is unavailable
+    ]
+    for family, filenames in font_options:
+        for filename in filenames:
+            ttf_path = os.path.join(fonts_dir, filename)
+            if not os.path.exists(ttf_path):
+                continue
+            with open(ttf_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("ascii")
+            return (
+                f"@font-face {{ font-family: '{family}'; "
+                f"src: url('data:font/ttf;base64,{encoded}') format('truetype'); "
+                "font-weight: 400; font-style: normal; }\n"
+                f"@font-face {{ font-family: '{family}'; "
+                f"src: url('data:font/ttf;base64,{encoded}') format('truetype'); "
+                "font-weight: 700; font-style: normal; }}"
+            )
+    return ""
 
 
 def _normalize_risk(risk: Any, probability: float) -> str:

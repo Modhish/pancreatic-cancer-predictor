@@ -26,11 +26,7 @@ RISK_COLORS = {
 }
 
 GUIDELINE_LINKS = [
-    ("NCCN v2.2024", "https://www.nccn.org/professionals/physician_gls/pdf/pancreatic.pdf"),
-    ("ASCO 2023", "https://ascopubs.org/doi/full/10.1200/JCO.23.00000"),
-    ("ESMO 2023", "https://www.esmo.org/guidelines/gastrointestinal-cancers/pancreatic-cancer"),
-    ("CAPS 2020", "https://gut.bmj.com/content/69/1/7"),
-    ("AGA 2020", "https://www.gastrojournal.org/article/S0016-5085(20)30094-6/fulltext"),
+    # Guidelines removed from PDF output per request.
 ]
 
 COPY = {
@@ -148,14 +144,17 @@ COPY = {
 
 
 def _ensure_unicode_font(pdf: FPDF) -> Tuple[str, bool]:
-    """Load DejaVu font if available so Cyrillic renders correctly (with system fallback)."""
+    """Load Times New Roman if available so Cyrillic renders correctly (with fallback)."""
     fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
     candidates = [
-        os.path.join(fonts_dir, "DejaVuSans.ttf"),
+        os.path.join(fonts_dir, "TimesNewRoman.ttf"),
+        os.path.join(fonts_dir, "Times New Roman.ttf"),
+        os.path.join(fonts_dir, "times.ttf"),
+        os.path.join(fonts_dir, "DejaVuSans.ttf"),  # fallback to legacy font if Times New Roman is absent
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # system font inside container
     ]
     # Use a fresh font name to avoid picking up stale cache PKL files with wrong absolute paths.
-    font_name = "DejaVuDyn"
+    font_name = "ReportSerifDyn"
     for ttf_path in candidates:
         try:
             if os.path.exists(ttf_path):
@@ -410,16 +409,6 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
             pdf.multi_cell(content_width - 6, 6, _safe(action, unicode_ready))
         pdf.ln(2)
         divider()
-
-    # Guidelines
-    section_header(copy["guideline_title"], fill=(239, 246, 255))
-    pdf.set_font(font_family, "", 10)
-    pdf.set_text_color(37, 99, 235)
-    for label, url in GUIDELINE_LINKS:
-        pdf.cell(5, 6, _safe("-", unicode_ready), ln=0)
-        pdf.cell(0, 6, _safe(label, unicode_ready), ln=1, link=url)
-    pdf.set_text_color(*PALETTE["neutral"])
-    pdf.ln(2)
 
     # Footer
     pdf.set_font(font_family, "I", 9)

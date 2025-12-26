@@ -23,12 +23,16 @@ function HomeSection({
   t,
 }: HomeSectionProps): JSX.Element {
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden">
+      {/* Animated spectrum background */}
+      <div className="absolute inset-0 -z-10 animate-gradient bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.25),transparent_32%),radial-gradient(circle_at_50%_80%,rgba(168,85,247,0.18),transparent_30%)]" />
+      <div className="absolute inset-0 -z-20 bg-gradient-to-b from-[var(--bg)] via-[var(--bg)]/90 to-[var(--bg-2)]" />
+
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-700 via-blue-600 to-blue-500 text-white py-20 rounded-b-3xl shadow-lg">
+      <section className="text-white py-20 rounded-b-3xl shadow-lg bg-gradient-to-br from-blue-700/90 via-indigo-700/80 to-slate-900/80 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-6">
-            <h1 className="text-4xl md:text-6xl font-bold leading-tight">
+            <h1 className="text-4xl md:text-6xl font-bold leading-tight drop-shadow">
               {t("home_hero_title_1")}
               <span className="block text-blue-100">
                 {t("home_hero_title_2")}

@@ -55,12 +55,21 @@ def _check_pdf_unicode_font() -> None:
     """Log a warning if the Unicode PDF font is missing."""
     try:
         fonts_dir = os.path.join(os.path.dirname(__file__), "..", "fonts")
-        ttf_path = os.path.abspath(os.path.join(fonts_dir, "DejaVuSans.ttf"))
-        if not os.path.exists(ttf_path):
+        times_candidates = [
+            os.path.abspath(os.path.join(fonts_dir, "TimesNewRoman.ttf")),
+            os.path.abspath(os.path.join(fonts_dir, "Times New Roman.ttf")),
+            os.path.abspath(os.path.join(fonts_dir, "times.ttf")),
+        ]
+        dejavu_candidates = [
+            os.path.abspath(os.path.join(fonts_dir, "DejaVuSans.ttf")),
+        ]
+        has_times = any(os.path.exists(path) for path in times_candidates)
+        has_dejavu = any(os.path.exists(path) for path in dejavu_candidates)
+        if not (has_times or has_dejavu):
             logger.warning(
                 "PDF Unicode font missing: %s. Russian text in PDFs may not render. "
-                "Add DejaVuSans.ttf (see backend/fonts/README.md)",
-                ttf_path,
+                "Add TimesNewRoman.ttf (preferred) or DejaVuSans.ttf (see backend/fonts/README.md)",
+                times_candidates[0],
             )
     except Exception as exc:  # pragma: no cover
         logger.debug("Font check skipped due to error: %s", exc)

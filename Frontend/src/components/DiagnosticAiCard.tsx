@@ -1,17 +1,6 @@
 import React, { useMemo } from "react";
-import {
-  Brain,
-  FileText,
-  Loader2,
-  ShieldCheck,
-  Star,
-  ExternalLink,
-} from "lucide-react";
-import {
-  GUIDELINE_LINKS,
-  ParsedAiAnalysis,
-  parseAiAnalysis,
-} from "../utils/aiAnalysis";
+import { Brain, FileText, Loader2 } from "lucide-react";
+import { ParsedAiAnalysis, parseAiAnalysis } from "../utils/aiAnalysis";
 import { AppResult } from "../hooks/useAppState";
 
 export interface DiagnosticAiCardProps {
@@ -49,7 +38,6 @@ export default function DiagnosticAiCard(
             <Brain className="h-5 w-5 text-blue-600" />
             {t("ai_title")}
           </h3>
-          <p className="mt-1 text-xs text-slate-500">{t("ai_disclaimer")}</p>
         </div>
         <div className="flex flex-col gap-3 w-full lg:w-auto">
           <div className="flex flex-wrap items-center gap-3">
@@ -138,29 +126,6 @@ export default function DiagnosticAiCard(
         ) : (
           <p className="text-sm text-slate-500">{t("ai_unavailable")}</p>
         )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[0.7rem] text-slate-500">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          <span>{t("disclaimer_title")}</span>
-          <span className="text-slate-600">{t("disclaimer_text")}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {GUIDELINE_LINKS.map(({ label, href }) => (
-            <a
-              key={href}
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700"
-            >
-              <Star className="h-3.5 w-3.5" />
-              <span>{label}</span>
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          ))}
-        </div>
       </div>
     </div>
   );
