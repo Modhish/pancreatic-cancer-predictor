@@ -5,6 +5,8 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+from core.security import init_security
+
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
@@ -35,6 +37,8 @@ CORS(
         "http://127.0.0.1:5173",
     ],
 )
+
+init_security(app)
 
 if Limiter is not None:
     limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")

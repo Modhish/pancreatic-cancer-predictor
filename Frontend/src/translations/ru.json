@@ -136,5 +136,7 @@
   "lab_hint_baso_pct": "Базофилы (% от лейкоцитов)",
   "lab_hint_glucose": "Глюкоза натощак (ммоль/л)",
   "lab_hint_act": "Активированное время свертывания (сек)",
-  "lab_hint_bilirubin": "Общий билирубин (мкмоль/л)"
+  "lab_hint_bilirubin": "Общий билирубин (мкмоль/л)",
+  "request_error_title": "Ошибка запроса",
+  "validation_title": "Проверка ввода"
 }

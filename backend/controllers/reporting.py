@@ -7,6 +7,7 @@ from datetime import datetime
 from flask import current_app, jsonify, request, send_file
 
 from core.settings import logger, rate_limit
+from core.security import audit_event, current_role, get_request_id, require_role
 from services import diagnostic_system
 from services import html_report
 
@@ -18,10 +19,20 @@ PDF_RATE_LIMIT = os.getenv("PDF_RATE_LIMIT", "60/minute")
 
 @api_bp.route("/report", methods=["POST"])
 @rate_limit(PDF_RATE_LIMIT)
+@require_role(["clinician", "researcher", "admin"])
 def download_report():
     """Generate a PDF report that summarizes the diagnostic results."""
+    request_id = get_request_id()
     try:
         if not request.json:
+            audit_event(
+                "report",
+                current_role(),
+                status="validation_error",
+                detail="missing_json",
+                http_status=400,
+                request_id=request_id,
+            )
             return jsonify({"error": "No JSON data provided", "status": "validation_error"}), 400
 
         payload = request.json
@@ -33,6 +44,14 @@ def download_report():
         analysis_data = payload.get("analysis") or payload.get("result")
 
         if not isinstance(patient_values, dict) or not isinstance(analysis_data, dict):
+            audit_event(
+                "report",
+                current_role(),
+                status="validation_error",
+                detail="missing_context",
+                http_status=400,
+                request_id=request_id,
+            )
             return (
                 jsonify(
                     {
@@ -42,7 +61,7 @@ def download_report():
                     }
                 ),
                 400,
-        )
+            )
 
         # Normalize expected keys
         analysis = dict(analysis_data)
@@ -71,6 +90,18 @@ def download_report():
 
         lang_suffix = "ru" if language.startswith("ru") else "en"
         filename = f"diagnoai-pancreas-report-{lang_suffix}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.pdf"
+        audit_event(
+            "report",
+            current_role(),
+            status="success",
+            detail=f"risk={analysis.get('risk_level', 'n/a')}",
+            http_status=200,
+            request_id=request_id,
+            extra={
+                "language": language,
+                "patient_fields": len(patient_values or {}),
+            },
+        )
         return send_file(
             report,
             mimetype="application/pdf",
@@ -80,6 +111,14 @@ def download_report():
     except Exception as exc:  # pragma: no cover
         logger.error("Report generation error: %s", exc)
         logger.error(traceback.format_exc())
+        audit_event(
+            "report",
+            current_role(),
+            status="error",
+            detail=str(exc),
+            http_status=500,
+            request_id=request_id,
+        )
         return (
             jsonify(
                 {

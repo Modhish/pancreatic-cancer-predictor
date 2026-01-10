@@ -1,4 +1,4 @@
-﻿// Frontend-safe i18n with a Node-i18n-like configure API
+// Frontend-safe i18n with a Node-i18n-like configure API
 // Loads JSON resources and exposes t/__/configure/setLocale/getLocale
 
 import en from "./en.json";
@@ -18,7 +18,7 @@ export interface SupportedLanguage {
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
   { value: "en", label: "EN", name: "English" },
-  { value: "ru", label: "RU", name: "Русский" },
+  { value: "ru", label: "RU", name: "???????" },
 ];
 
 export type TranslationKey = keyof typeof en;
@@ -66,8 +66,11 @@ export const i18n: I18nAPI = {
         registry[lng] = { ...(registry[lng] || {}), ...(res || {}) };
       }
     }
-    // Keep RU fallback to EN for missing keys
-    if (registry.ru) registry.ru = { ...en, ...registry.ru };
+    // Fallback: merge EN keys into every registered locale
+    Object.keys(registry).forEach((lang) => {
+      if (lang === "en") return;
+      registry[lang] = { ...en, ...(registry[lang] || {}) };
+    });
   },
   setLocale(lang: string): void {
     const next = locales.includes(lang) ? lang : defaultLocale;
@@ -116,4 +119,3 @@ export function t(key: TranslationKey): string {
 }
 
 export default i18n;
-

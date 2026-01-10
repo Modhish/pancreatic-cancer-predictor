@@ -90,3 +90,8 @@ a {
 ::selection {
   @apply bg-indigo-200;
 }
+
+[dir="rtl"] .app-shell,
+.app-shell[dir="rtl"] {
+  direction: rtl;
+}

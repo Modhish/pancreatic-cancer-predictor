@@ -7,6 +7,7 @@ from flask import current_app, jsonify, request
 
 from core.constants import rebuild_feature_vector
 from core.settings import logger, rate_limit
+from core.security import audit_event, current_role, get_request_id, require_role
 from services import diagnostic_system
 from utils.text import encode_text_base64, repair_text_encoding
 
@@ -15,10 +16,20 @@ from . import api_bp
 
 @api_bp.route("/commentary", methods=["POST"])
 @rate_limit("30/minute")
+@require_role(["clinician", "researcher", "admin"])
 def regenerate_commentary():
     """Regenerate AI commentary in a requested language using existing context."""
+    request_id = get_request_id()
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
+        audit_event(
+            "commentary",
+            current_role(),
+            status="validation_error",
+            detail="invalid_payload",
+            http_status=400,
+            request_id=request_id,
+        )
         return jsonify({"error": "Invalid payload", "status": "validation_error"}), 400
 
     analysis_payload = payload.get("analysis") if isinstance(payload.get("analysis"), dict) else {}
@@ -38,6 +49,14 @@ def regenerate_commentary():
     feature_vector = merged.get("features") or merged.get("feature_vector")
 
     if patient_values is None and not isinstance(feature_vector, list):
+        audit_event(
+            "commentary",
+            current_role(),
+            status="validation_error",
+            detail="missing_patient_values",
+            http_status=400,
+            request_id=request_id,
+        )
         return (
             jsonify(
                 {
@@ -102,6 +121,19 @@ def regenerate_commentary():
         except Exception:
             audience_commentaries = {client_type: commentary}
         risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
+        audit_event(
+            "commentary",
+            current_role(),
+            status="success",
+            detail=f"risk={risk_level}",
+            http_status=200,
+            request_id=request_id,
+            extra={
+                "language": language,
+                "client_type": client_type,
+                "prediction": int(prediction),
+            },
+        )
         return jsonify(
             {
                 "ai_explanation": commentary,
@@ -116,6 +148,14 @@ def regenerate_commentary():
     except Exception as exc:  # pragma: no cover
         logger.error("Commentary regeneration error: %s", exc)
         logger.error(traceback.format_exc())
+        audit_event(
+            "commentary",
+            current_role(),
+            status="error",
+            detail=str(exc),
+            http_status=500,
+            request_id=request_id,
+        )
         return (
             jsonify(
                 {

@@ -9,7 +9,7 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 def register_routes(app):
     """Register blueprints and error handlers on the Flask app."""
     # Import routes so decorators run and attach to the shared blueprint
-    from . import commentary, prediction, reporting, system  # noqa: F401
+    from . import batch, commentary, prediction, reporting, system  # noqa: F401
     from .errors import register_error_handlers
 
     app.register_blueprint(api_bp)

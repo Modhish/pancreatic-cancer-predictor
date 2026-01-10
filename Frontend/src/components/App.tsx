@@ -25,7 +25,6 @@ export default function App(): JSX.Element {
     currentSection,
     setCurrentSection,
     form,
-    setForm,
     result,
     loading,
     downloading,
@@ -54,13 +53,20 @@ export default function App(): JSX.Element {
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const root = document.documentElement;
+      root.setAttribute("dir", "ltr");
+      root.setAttribute("lang", language);
+    }
+  }, [language]);
+
   const renderSection = (): JSX.Element => {
     switch (currentSection) {
       case "diagnostic":
         return (
           <DiagnosticTool
             form={form}
-            setForm={setForm}
             result={result}
             loading={loading}
             downloading={downloading}
@@ -70,8 +76,6 @@ export default function App(): JSX.Element {
             handleDownload={handleDownload}
             handleClear={handleClear}
             validate={validate}
-            language={language}
-            setLanguage={setLanguage}
             clientType={clientType}
             setClientType={setClientType}
             analysisRefreshing={analysisRefreshing}
@@ -95,7 +99,11 @@ export default function App(): JSX.Element {
   };
 
   return (
-    <div className="app-shell min-h-screen text-[var(--text)] transition-colors" dir="ltr">
+    <div
+      className="app-shell min-h-screen text-[var(--text)] transition-colors"
+      dir="ltr"
+      lang={language}
+    >
       <Navigation
         currentSection={currentSection}
         setCurrentSection={setCurrentSection}

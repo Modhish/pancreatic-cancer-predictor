@@ -6,7 +6,6 @@ import DiagnosticResultsSection from "./DiagnosticResultsSection";
 
 export interface DiagnosticToolProps {
   form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
   result: AppResult | null;
   loading: boolean;
   downloading: boolean;
@@ -21,8 +20,6 @@ export interface DiagnosticToolProps {
   analysisRefreshing: boolean;
   aiExplanation: string;
   t: (key: string) => string;
-  language: string;
-  setLanguage: (lang: string) => void;
 }
 
 export default function DiagnosticTool(
@@ -30,7 +27,6 @@ export default function DiagnosticTool(
 ): JSX.Element {
   const {
     form,
-    setForm,
     result,
     loading,
     downloading,
@@ -47,10 +43,8 @@ export default function DiagnosticTool(
     t,
   } = props;
 
-  void setForm;
-
   return (
-    <div className="py-16 bg-slate-100" dir="ltr">
+    <div className="py-16 bg-slate-100">
       <div className="max-w-[1800px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         <DiagnosticHeader t={t} />
 

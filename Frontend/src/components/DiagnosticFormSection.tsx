@@ -68,7 +68,7 @@ export default function DiagnosticFormSection(
         <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertTriangle className="h-4 w-4 mt-0.5 text-red-500" />
           <div>
-            <p className="font-semibold">Request error</p>
+            <p className="font-semibold">{t("request_error_title")}</p>
             <p className="mt-1 whitespace-pre-line">{err}</p>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function DiagnosticFormSection(
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500" />
           <div>
-            <p className="font-semibold">Input validation</p>
+            <p className="font-semibold">{t("validation_title")}</p>
             <p className="mt-1 whitespace-pre-line">{validate.message}</p>
           </div>
         </div>

@@ -304,7 +304,6 @@ export default function useAppState(): UseAppState {
   const handleSubmit = async () => {
     setErr("");
     if (!validate.ok) {
-      setErr(validate.message);
       return;
     }
     setLoading(true);

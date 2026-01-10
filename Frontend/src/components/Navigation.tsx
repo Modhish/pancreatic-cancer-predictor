@@ -167,7 +167,7 @@ function Navigation({
                   className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-100 shadow-inner transition mb-3"
                 >
                   {theme === "dark" ? <SunMedium className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                  <span>{theme === "dark" ? "Light mode" : "Night mode"}</span>
+                  <span>{theme === "dark" ? t("toggle_light") : t("toggle_dark")}</span>
                 </button>
                 <div className="relative flex items-center justify-center rounded-full bg-blue-50 border border-blue-100 p-1 overflow-hidden">
                   <span
