@@ -33,22 +33,24 @@ export default function ShapWaterfallPlot(
   };
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-slate-600">
-        <ScatterChart className="h-4 w-4 text-blue-500" />
-        <p className="text-sm font-semibold">{t("graph_waterfall")}</p>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-[var(--muted)]">
+        <ScatterChart className="h-4 w-4 text-[var(--accent)]" />
+        <p className="text-sm font-semibold text-[var(--text)]">
+          {t("graph_waterfall")}
+        </p>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="text-xs text-[var(--muted)]">
         f(x) ={" "}
-        <span className="font-semibold text-slate-800">
+        <span className="font-semibold text-[var(--text)]">
           {(shapFxDisplay ?? shapWaterfall.finalValue).toFixed(3)}
         </span>{" "}
         | E[f(X)] ={" "}
-        <span className="font-semibold text-slate-800">
+        <span className="font-semibold text-[var(--text)]">
           {shapWaterfall.baseline.toFixed(3)}
         </span>
       </p>
-      <div className="mt-4">
+      <div>
         <svg viewBox={`0 0 ${width} ${svgHeight}`} className="w-full">
           <defs>
             <pattern
@@ -60,7 +62,7 @@ export default function ShapWaterfallPlot(
               <path
                 d="M 20 0 L 0 0 0 20"
                 fill="none"
-                stroke="#e2e8f0"
+                stroke="var(--border)"
                 strokeWidth="0.5"
               />
             </pattern>
@@ -99,7 +101,7 @@ export default function ShapWaterfallPlot(
                   x={90}
                   y={yMid + 3}
                   textAnchor="end"
-                  className="fill-slate-600 text-[12px]"
+                  className="fill-[var(--muted)] text-[12px]"
                 >
                   {step.feature}
                 </text>
@@ -122,7 +124,7 @@ export default function ShapWaterfallPlot(
             x2={scaleX(shapWaterfall.finalValue)}
             y1={paddingY - 6}
             y2={svgHeight - paddingY + 6}
-            stroke="#94a3b8"
+            stroke="var(--border)"
             strokeDasharray="4 4"
           />
           <line
@@ -130,14 +132,14 @@ export default function ShapWaterfallPlot(
             x2={scaleX(shapWaterfall.baseline)}
             y1={paddingY - 6}
             y2={svgHeight - paddingY + 6}
-            stroke="#94a3b8"
+            stroke="var(--border)"
             strokeDasharray="4 4"
           />
           <text
             x={scaleX(shapWaterfall.finalValue)}
             y={paddingY - 10}
             textAnchor="middle"
-            className="text-[11px] fill-slate-600"
+            className="text-[11px] fill-[var(--muted)]"
           >
             f(x) = {shapWaterfall.finalValue.toFixed(3)}
           </text>
@@ -145,7 +147,7 @@ export default function ShapWaterfallPlot(
             x={scaleX(shapWaterfall.baseline)}
             y={svgHeight - paddingY + 20}
             textAnchor="middle"
-            className="text-[11px] fill-slate-600"
+            className="text-[11px] fill-[var(--muted)]"
           >
             E[f(X)] = {shapWaterfall.baseline.toFixed(3)}
           </text>

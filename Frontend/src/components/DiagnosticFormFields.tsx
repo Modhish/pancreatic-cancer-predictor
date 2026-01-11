@@ -49,7 +49,7 @@ export default function DiagnosticFormFields(
     <div className="space-y-6">
       {FIELD_GROUPS.map(({ titleKey, keys }) => (
         <div key={titleKey}>
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">
+          <h4 className="text-sm font-semibold text-[var(--text)] mb-2">
             {t(titleKey)}
           </h4>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -64,10 +64,10 @@ export default function DiagnosticFormFields(
                 (value < range[0] || value > range[1]);
               return (
                 <div key={key} className="space-y-1">
-                  <label className="flex items-center justify-between text-xs font-medium text-slate-700">
+                  <label className="flex items-center justify-between text-xs font-medium text-[var(--text)]">
                     <span title={hint}>{key.toUpperCase()}</span>
                     {range && (
-                      <span className="text-[0.7rem] text-slate-400">
+                      <span className="text-[0.7rem] text-[var(--muted)]">
                         {range[0]} - {range[1]}
                       </span>
                     )}
@@ -77,19 +77,19 @@ export default function DiagnosticFormFields(
                     name={key}
                     value={form[key]}
                     onChange={handleChange}
-                    className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500 ${
+                    className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] text-[var(--text)] ${
                       outOfRange
-                        ? "border-amber-400 bg-amber-50"
-                        : "border-slate-200 bg-white"
+                        ? "border-amber-400 bg-[color-mix(in_srgb,var(--surface)_85%,#f59e0b_15%)]"
+                        : "border-[var(--border)] bg-[var(--surface)]"
                     }`}
                   />
                   {outOfRange && (
-                    <p className="text-[0.7rem] text-amber-700">
+                    <p className="text-[0.7rem] text-amber-500">
                       Outside reference range
                     </p>
                   )}
                   {hint && (
-                    <p className="text-[0.7rem] text-slate-500">{hint}</p>
+                    <p className="text-[0.7rem] text-[var(--muted)]">{hint}</p>
                   )}
                 </div>
               );

@@ -26,46 +26,59 @@ export default function DiagnosticAiCard(
     t,
   } = props;
 
+  const audiences = [
+    { id: "patient", labelKey: "audience_patient" },
+    { id: "doctor", labelKey: "audience_doctor" },
+    { id: "scientist", labelKey: "audience_scientist" },
+  ] as const;
+  const activeIndex = Math.max(
+    0,
+    audiences.findIndex((aud) => aud.id === clientType),
+  );
+
   const aiStructured: ParsedAiAnalysis | null = useMemo(() => {
     return parseAiAnalysis(aiExplanation);
   }, [aiExplanation]);
 
   return (
-    <div className="bg-slate-50 rounded-3xl border border-slate-200 p-5 md:p-6 space-y-4">
+    <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_85%,transparent)] p-6 md:p-7 space-y-5 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
+      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_top,rgba(29,185,84,0.18),transparent_60%),radial-gradient(circle_at_bottom,rgba(181,140,255,0.18),transparent_55%)]" />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Brain className="h-5 w-5 text-blue-600" />
+          <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
+            <Brain className="h-5 w-5 text-[var(--accent)]" />
             {t("ai_title")}
           </h3>
         </div>
         <div className="flex flex-col gap-3 w-full lg:w-auto">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-col gap-2">
-              <span className="text-[0.65rem] uppercase tracking-[0.2em] text-slate-500 font-semibold">
+              <span className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--muted)] font-semibold">
                 {t("audience")}
               </span>
-              <div className="inline-flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-1.5 shadow-sm backdrop-blur">
-                {["patient", "doctor", "scientist"].map((id) => {
-                  const active = clientType === id;
-                  const labelKey =
-                    id === "patient"
-                      ? "audience_patient"
-                      : id === "doctor"
-                        ? "audience_doctor"
-                        : "audience_scientist";
+              <div className="relative inline-flex w-full max-w-[360px] rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] p-1.5 shadow-sm backdrop-blur">
+                <span
+                  className="absolute inset-y-1 rounded-xl bg-[var(--accent)] shadow-[0_12px_28px_rgba(29,185,84,0.25)] transition-all duration-300 ease-out"
+                  style={{
+                    left: `${(100 / audiences.length) * activeIndex}%`,
+                    width: `${100 / audiences.length}%`,
+                  }}
+                />
+                {audiences.map((audience) => {
+                  const active = clientType === audience.id;
                   return (
                     <button
-                      key={id}
+                      key={audience.id}
                       type="button"
-                      onClick={() => setClientType(id)}
-                      className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
+                      onClick={() => setClientType(audience.id)}
+                      aria-pressed={active}
+                      className={`relative z-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
                         active
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                          : "text-blue-700 hover:bg-blue-50"
+                          ? "text-black"
+                          : "text-[var(--muted)] hover:text-[var(--text)]"
                       }`}
                     >
-                      {t(labelKey)}
+                      {t(audience.labelKey)}
                     </button>
                   );
                 })}
@@ -76,7 +89,7 @@ export default function DiagnosticAiCard(
               type="button"
               onClick={handleDownload}
               disabled={!result || downloading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black shadow-[0_12px_28px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition w-full sm:w-auto"
             >
               {downloading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -89,13 +102,13 @@ export default function DiagnosticAiCard(
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
+      <div className="relative z-10 rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-5 py-5 text-sm text-[var(--text)] leading-relaxed">
         {aiExplanation ? (
           aiStructured ? (
             <div className="space-y-3">
               <p className="font-semibold">{aiStructured.header}</p>
               {aiStructured.subtitle && (
-                <p className="text-xs text-slate-500">{aiStructured.subtitle}</p>
+                <p className="text-xs text-[var(--muted)]">{aiStructured.subtitle}</p>
               )}
               {aiStructured.sections.map((section) => (
                 <div key={section.title} className="space-y-1.5">
@@ -115,7 +128,7 @@ export default function DiagnosticAiCard(
                 </div>
               ))}
               {aiStructured.footer && (
-                <p className="text-xs text-slate-500 pt-2">
+                <p className="text-xs text-[var(--muted)] pt-2">
                   {aiStructured.footer.text}
                 </p>
               )}
@@ -124,7 +137,7 @@ export default function DiagnosticAiCard(
             <p className="whitespace-pre-line">{aiExplanation}</p>
           )
         ) : (
-          <p className="text-sm text-slate-500">{t("ai_unavailable")}</p>
+          <p className="text-sm text-[var(--muted)]">{t("ai_unavailable")}</p>
         )}
       </div>
     </div>

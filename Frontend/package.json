@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.0",
+    "framer-motion": "^11.0.0",
     "html2canvas": "^1.4.1",
     "i18n": "^0.15.3",
     "jspdf": "^3.0.3",

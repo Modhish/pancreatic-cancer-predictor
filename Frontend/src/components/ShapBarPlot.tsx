@@ -23,14 +23,14 @@ export default function ShapBarPlot(
   const minFillPercent = 25;
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-slate-600">
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-[var(--muted)]">
         <svg
           width="18"
           height="18"
           fill="none"
           viewBox="0 0 24 24"
-          className="text-blue-500"
+          className="text-[var(--accent)]"
         >
           <path
             d="M5 9h3v11H5V9Zm11 0h3v11h-3V9Zm-6-4h3v15h-3V5Z"
@@ -38,10 +38,10 @@ export default function ShapBarPlot(
           />
         </svg>
         <div>
-          <p className="text-sm font-semibold text-slate-800">
+          <p className="text-sm font-semibold text-[var(--text)]">
             {t("shap_bar_title")}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--muted)]">
             {t("shap_bar_subtitle")}
           </p>
         </div>
@@ -56,13 +56,13 @@ export default function ShapBarPlot(
           const formatted = `${positive ? "+" : ""}${entry.value.toFixed(3)}`;
           return (
             <div key={entry.feature} className="space-y-1 w-full">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 <span>{entry.feature}</span>
                 <span className={positive ? "text-rose-500" : "text-blue-500"}>
                   {formatted}
                 </span>
               </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-100">
+              <div className="h-2.5 w-full rounded-full bg-[var(--surface)]">
                 <div
                   className="h-full w-full rounded-full transition-all"
                   style={{

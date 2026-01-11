@@ -20,7 +20,7 @@ export default function DiagnosticFormActions(
           type="button"
           onClick={handleSubmit}
           disabled={loading}
-          className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-blue-600 text-white text-sm font-semibold shadow-md hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+          className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-[var(--accent)] text-black text-sm font-semibold shadow-[0_10px_24px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition"
         >
           {loading ? (
             <>
@@ -37,7 +37,7 @@ export default function DiagnosticFormActions(
         <button
           type="button"
           onClick={handleClear}
-          className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+          className="inline-flex items-center justify-center px-4 py-2.5 rounded-full border border-[var(--border)] bg-[var(--surface)] text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-2)] transition"
         >
           <X className="h-4 w-4 mr-2" />
           {t("clear")}

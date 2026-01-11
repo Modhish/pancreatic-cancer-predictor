@@ -22,7 +22,7 @@ export default function GraphToggleControls(
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-[0.75rem]">
-      <span className="text-slate-500">Graphs:</span>
+      <span className="text-[var(--muted)]">Graphs:</span>
       {controls.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -30,8 +30,8 @@ export default function GraphToggleControls(
           onClick={() => onToggle(key)}
           className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 transition ${
             visibility[key]
-              ? "border-blue-500 bg-blue-50 text-blue-700"
-              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              ? "border-[var(--accent)] bg-[var(--surface-2)] text-[var(--text)] shadow-[0_8px_18px_rgba(29,185,84,0.2)]"
+              : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]"
           }`}
         >
           <Icon className="h-3.5 w-3.5" />

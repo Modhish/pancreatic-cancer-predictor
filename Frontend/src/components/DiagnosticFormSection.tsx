@@ -43,29 +43,29 @@ export default function DiagnosticFormSection(
   } = props;
 
   return (
-    <section className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 md:p-8 space-y-6">
+    <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 md:p-8 space-y-6 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-blue-600" />
+          <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
+            <FileText className="h-5 w-5 text-[var(--accent)]" />
             {t("diag_patient_values")}
           </h3>
-          <p className="mt-1 text-xs text-slate-500">{t("empty_prompt")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("empty_prompt")}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 text-xs text-slate-500">
+        <div className="flex flex-col items-end gap-1 text-xs text-[var(--muted)]">
           <span className="inline-flex items-center gap-1">
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+            <ShieldCheck className="h-4 w-4 text-[var(--accent)]" />
             {t("footer_hipaa")}
           </span>
           <span className="inline-flex items-center gap-1">
-            <Award className="h-4 w-4 text-blue-500" />
+            <Award className="h-4 w-4 text-[var(--accent-2)]" />
             {t("footer_fda")}
           </span>
         </div>
       </div>
 
       {err && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="flex items-start gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--border)_70%,#ef4444_30%)] bg-[color-mix(in_srgb,var(--surface)_92%,#ef4444_8%)] px-4 py-3 text-sm text-[var(--text)]">
           <AlertTriangle className="h-4 w-4 mt-0.5 text-red-500" />
           <div>
             <p className="font-semibold">{t("request_error_title")}</p>
@@ -75,7 +75,7 @@ export default function DiagnosticFormSection(
       )}
 
       {!validate.ok && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <div className="flex items-start gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--border)_70%,#f59e0b_30%)] bg-[color-mix(in_srgb,var(--surface)_92%,#f59e0b_8%)] px-4 py-3 text-xs text-[var(--text)]">
           <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500" />
           <div>
             <p className="font-semibold">{t("validation_title")}</p>

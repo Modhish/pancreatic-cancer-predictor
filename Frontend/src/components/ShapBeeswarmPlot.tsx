@@ -22,19 +22,19 @@ export default function ShapBeeswarmPlot(
   const normalizedRange = shapRange || 1;
 
   return (
-    <div className="space-y-3 text-[0.75rem] text-slate-600">
+    <div className="space-y-3 text-[0.75rem] text-[var(--muted)]">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-500">
+        <h4 className="text-sm font-semibold text-[var(--text)]">
           {t("shap_beeswarm_title")}
         </h4>
-        <div className="text-[0.6rem] uppercase tracking-[0.3em] text-slate-400">
+        <div className="text-[0.6rem] uppercase tracking-[0.3em] text-[var(--muted)]">
           {t("shap_beeswarm_neutral")}
         </div>
       </div>
-      <div className="rounded-[20px] border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 shadow-sm">
-        <div className="relative h-[250px] w-full rounded-[20px] bg-white px-4 py-5">
-          <div className="absolute inset-y-0 left-1/2 w-px bg-slate-200" />
-          <div className="absolute inset-x-0 bottom-2 flex items-center justify-between px-4 text-[0.65rem] text-slate-400">
+      <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-2)] p-4 shadow-sm">
+        <div className="relative h-[250px] w-full rounded-[20px] bg-[var(--surface)] px-4 py-5">
+          <div className="absolute inset-y-0 left-1/2 w-px bg-[var(--border)]" />
+          <div className="absolute inset-x-0 bottom-2 flex items-center justify-between px-4 text-[0.65rem] text-[var(--muted)]">
             <span>{t("shap_beeswarm_axis_left")}</span>
             <span>{t("shap_beeswarm_axis_right")}</span>
           </div>
@@ -49,7 +49,7 @@ export default function ShapBeeswarmPlot(
                   return (
                     <React.Fragment key={`${group.feature}-${pointIdx}`}>
                       <span
-                        className="absolute text-[0.7rem] font-semibold text-slate-600"
+                        className="absolute text-[0.7rem] font-semibold text-[var(--text)]"
                         style={{
                           left: `${x}%`,
                           top: `${y - 12}px`,
@@ -59,7 +59,7 @@ export default function ShapBeeswarmPlot(
                         {label}
                       </span>
                       <span
-                        className="absolute text-[0.6rem] text-slate-500"
+                        className="absolute text-[0.6rem] text-[var(--muted)]"
                         style={{
                           left: `${x}%`,
                           top: `${y + 12}px`,
@@ -69,7 +69,7 @@ export default function ShapBeeswarmPlot(
                         {group.feature}
                       </span>
                       <span
-                        className="absolute h-3.5 w-3.5 rounded-full border-2 border-white shadow"
+                        className="absolute h-3.5 w-3.5 rounded-full border-2 border-[var(--surface)] shadow"
                         style={{
                           left: `${x}%`,
                           top: `${y}px`,

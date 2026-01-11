@@ -65,7 +65,7 @@ export default function ShapLineChart(
   }, [shapSummary, shapWaterfall, patientValues]);
 
   if (!points.length) {
-    return <p className="text-sm text-slate-500">{t("shap_unavailable")}</p>;
+    return <p className="text-sm text-[var(--muted)]">{t("shap_unavailable")}</p>;
   }
 
   const yValues = points.map((p) => p.y);
@@ -102,12 +102,14 @@ export default function ShapLineChart(
   });
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-slate-700">
-        <LineChart className="h-4 w-4 text-blue-500" />
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-[var(--muted)]">
+        <LineChart className="h-4 w-4 text-[var(--accent)]" />
         <div>
-          <p className="text-sm font-semibold">{t("shap_line_title")}</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-semibold text-[var(--text)]">
+            {t("shap_line_title")}
+          </p>
+          <p className="text-xs text-[var(--muted)]">
             {t("shap_line_subtitle")}
           </p>
         </div>
@@ -124,14 +126,14 @@ export default function ShapLineChart(
                   x2={width - paddingX / 2}
                   y1={y}
                   y2={y}
-                  stroke="#e2e8f0"
+                  stroke="var(--border)"
                   strokeWidth={0.8}
                 />
                 <text
                   x={paddingX - 8}
                   y={y + 4}
                   textAnchor="end"
-                  className="text-[10px] fill-slate-500"
+                  className="text-[10px] fill-[var(--muted)]"
                 >
                   {(tick * 100).toFixed(1)}%
                 </text>
@@ -144,7 +146,7 @@ export default function ShapLineChart(
             x2={width - paddingX / 2}
             y1={scaleY(points[0].y)}
             y2={scaleY(points[0].y)}
-            stroke="#cbd5e1"
+            stroke="var(--border)"
             strokeWidth={1}
             strokeDasharray="4 4"
           />
@@ -181,12 +183,19 @@ export default function ShapLineChart(
             const y = scaleY(point.y);
             return (
               <g key={`point-${point.label}-${idx}`}>
-                <circle cx={x} cy={y} r={4} fill="#fff" stroke={color} strokeWidth={2} />
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={4}
+                  fill="var(--surface)"
+                  stroke={color}
+                  strokeWidth={2}
+                />
                 <text
                   x={x}
                   y={y - 10}
                   textAnchor="middle"
-                  className="text-[10px] font-semibold fill-slate-700"
+                  className="text-[10px] font-semibold fill-[var(--text)]"
                 >
                   {point.label}
                 </text>
@@ -200,7 +209,7 @@ export default function ShapLineChart(
               x={scaleX(idx)}
               y={height - 6}
               textAnchor="middle"
-              className="text-[10px] fill-slate-500"
+              className="text-[10px] fill-[var(--muted)]"
             >
               {point.label}
             </text>
@@ -208,34 +217,34 @@ export default function ShapLineChart(
         </svg>
       </div>
 
-      <div className="mt-4 grid gap-2 text-[0.75rem] text-slate-600">
+      <div className="mt-4 grid gap-2 text-[0.75rem] text-[var(--muted)]">
         {points.slice(1, -1).map((p) => (
           <div
             key={p.label}
-            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
+            className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
           >
             <div className="flex flex-col">
-              <span className="font-semibold text-slate-800">{p.label}</span>
-                    <span className="text-[0.7rem] text-slate-500">
-                      {t("shap_line_patient_value")}: {formatValue(p.featureValue)}
-                    </span>
-                  </div>
-                  <span
+              <span className="font-semibold text-[var(--text)]">{p.label}</span>
+              <span className="text-[0.7rem] text-[var(--muted)]">
+                {t("shap_line_patient_value")}: {formatValue(p.featureValue)}
+              </span>
+            </div>
+            <span
               className={`text-xs font-semibold ${
                 p.contribution > 0
                   ? "text-rose-600"
                   : p.contribution < 0
                   ? "text-sky-600"
-                  : "text-slate-500"
+                  : "text-[var(--muted)]"
               }`}
             >
               {formatDelta(p.contribution)}
             </span>
           </div>
         ))}
-        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("shap_line_net")}:{" "}
-          <span className="font-semibold text-slate-900">
+          <span className="font-semibold text-[var(--text)]">
             {(points[points.length - 1].y * 100).toFixed(1)}%
           </span>{" "}
           ({t("shap_line_baseline")} {(points[0].y * 100).toFixed(1)}%).

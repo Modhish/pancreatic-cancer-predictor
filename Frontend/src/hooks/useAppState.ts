@@ -40,6 +40,20 @@ const normalizeSectionFromPath = (pathname: string): SectionId => {
   return SECTION_SET.has(sanitized) ? (sanitized as SectionId) : DEFAULT_SECTION;
 };
 
+const scrollToSection = (
+  section: string,
+  behavior: ScrollBehavior = "smooth",
+) => {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const target = document.getElementById(section);
+  if (!target) {
+    return;
+  }
+  target.scrollIntoView({ behavior, block: "start" });
+};
+
 type AiPayload = Partial<Record<string, unknown>> | null | undefined;
 
 type Base64Buffer = {
@@ -191,6 +205,7 @@ export default function useAppState(): UseAppState {
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
   const inFlightCommentaryKey = useRef<string | null>(null);
   const lastCompletedCommentaryKey = useRef<string | null>(null);
+  const lastPathnameRef = useRef<string | null>(null);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -205,6 +220,16 @@ export default function useAppState(): UseAppState {
         { pathname: canonicalPath, search: location.search },
         { replace: true },
       );
+    }
+    if (lastPathnameRef.current !== location.pathname) {
+      lastPathnameRef.current = location.pathname;
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() =>
+          scrollToSection(normalizedSection, "auto"),
+        );
+      } else {
+        scrollToSection(normalizedSection, "auto");
+      }
     }
   }, [location.pathname, location.search, navigate]);
 
@@ -245,10 +270,18 @@ export default function useAppState(): UseAppState {
       );
       const targetPath = canonicalSectionPath(normalized);
       if (location.pathname !== targetPath) {
+        lastPathnameRef.current = targetPath;
         navigate(
           { pathname: targetPath, search: location.search },
           { replace: false },
         );
+      }
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() =>
+          scrollToSection(normalized, "smooth"),
+        );
+      } else {
+        scrollToSection(normalized, "smooth");
       }
     },
     [location.pathname, location.search, navigate],

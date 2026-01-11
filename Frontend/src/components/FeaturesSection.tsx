@@ -52,7 +52,11 @@ function FeaturesSection({ t }: FeaturesSectionProps): JSX.Element {
   ];
 
   return (
-    <div className="py-16 bg-slate-100">
+    <section
+      id="features"
+      className="py-16"
+      style={{ scrollMarginTop: "5rem" }}
+    >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-slate-900 mb-3">
@@ -82,7 +86,7 @@ function FeaturesSection({ t }: FeaturesSectionProps): JSX.Element {
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

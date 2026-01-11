@@ -44,35 +44,43 @@ export default function DiagnosticTool(
   } = props;
 
   return (
-    <div className="py-16 bg-slate-100">
-      <div className="max-w-[1800px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <DiagnosticHeader t={t} />
+    <section
+      id="diagnostic"
+      className="py-16 sm:py-20"
+      style={{ scrollMarginTop: "5rem" }}
+    >
+      <div className="mx-auto w-full max-w-[1680px] px-4 sm:px-8 lg:px-14">
+        <div className="space-y-10">
+          <DiagnosticHeader t={t} />
 
-        <div className="grid lg:grid-cols-2 gap-8 items-start">
-          <DiagnosticFormSection
-            form={form}
-            result={result}
-            loading={loading}
-            downloading={downloading}
-            err={err}
-            validate={validate}
-            aiExplanation={aiExplanation}
-            t={t}
-            clientType={clientType}
-            setClientType={setClientType}
-            handleChange={handleChange}
-            handleSubmit={handleSubmit}
-            handleDownload={handleDownload}
-            handleClear={handleClear}
-          />
+          <div className="rounded-[32px] border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] p-6 shadow-lg sm:p-8 md:p-10">
+            <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-start">
+              <DiagnosticFormSection
+                form={form}
+                result={result}
+                loading={loading}
+                downloading={downloading}
+                err={err}
+                validate={validate}
+                aiExplanation={aiExplanation}
+                t={t}
+                clientType={clientType}
+                setClientType={setClientType}
+                handleChange={handleChange}
+                handleSubmit={handleSubmit}
+                handleDownload={handleDownload}
+                handleClear={handleClear}
+              />
 
-          <DiagnosticResultsSection
-            result={result}
-            analysisRefreshing={analysisRefreshing}
-            t={t}
-          />
+              <DiagnosticResultsSection
+                result={result}
+                analysisRefreshing={analysisRefreshing}
+                t={t}
+              />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
