@@ -293,16 +293,29 @@ export default function useAppState(): UseAppState {
       const normalized = SUPPORTED_LANGUAGE_VALUES.has(normalizedValue)
         ? normalizedValue
         : DEFAULT_LANGUAGE;
+      const params = new URLSearchParams(searchParams);
+      const paramValue = params.get("lang");
+      const isSameLanguage = normalized === language;
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("language", normalized);
+      }
+
+      if (!isSameLanguage && typeof window !== "undefined") {
+        params.set("lang", normalized);
+        window.location.search = params.toString();
+        return;
+      }
+
       setLanguageState((prev) =>
         prev === normalized ? prev : normalized,
       );
-      const params = new URLSearchParams(searchParams);
-      if (params.get("lang") !== normalized) {
+      if (paramValue !== normalized) {
         params.set("lang", normalized);
         setSearchParams(params, { replace: true });
       }
     },
-    [searchParams, setSearchParams],
+    [language, searchParams, setSearchParams],
   );
 
   const handleChange = (

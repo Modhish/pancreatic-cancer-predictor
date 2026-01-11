@@ -1,4 +1,5 @@
-﻿from __future__ import annotations
+﻿
+from __future__ import annotations
 
 import os
 from datetime import datetime
@@ -12,11 +13,12 @@ from utils.text import repair_text_encoding
 
 
 PALETTE = {
-    "primary": (21, 94, 239),
-    "neutral": (30, 41, 59),
+    "accent": (15, 118, 110),
+    "neutral": (15, 23, 42),
     "muted": (100, 116, 139),
     "panel": (248, 250, 252),
     "border": (226, 232, 240),
+    "soft": (241, 245, 249),
 }
 
 RISK_COLORS = {
@@ -25,58 +27,158 @@ RISK_COLORS = {
     "Low": (22, 163, 74),
 }
 
-GUIDELINE_LINKS = [
-    # Guidelines removed from PDF output per request.
-]
+MEDICAL_RANGES = {
+    "wbc": (4.0, 11.0),
+    "rbc": (4.0, 5.5),
+    "plt": (150, 450),
+    "hgb": (110, 170),
+    "hct": (32, 52),
+    "mpv": (7.0, 13.0),
+    "pdw": (9.0, 20.0),
+    "mono": (0.1, 1.2),
+    "baso_abs": (0.0, 0.2),
+    "baso_pct": (0.0, 3.0),
+    "glucose": (3.5, 7.5),
+    "act": (10, 45),
+    "bilirubin": (3, 25),
+}
+
+RU_LAB_LABELS = {
+    "WBC": "Лейкоциты",
+    "RBC": "Эритроциты",
+    "PLT": "Тромбоциты",
+    "HGB": "Гемоглобин",
+    "HCT": "Гематокрит",
+    "MPV": "Средний объем тромбоцитов",
+    "PDW": "Ширина распределения тромбоцитов",
+    "MONO": "Моноциты",
+    "BASO_ABS": "Базофилы (абс.)",
+    "BASO_PCT": "Базофилы (%)",
+    "GLUCOSE": "Глюкоза натощак",
+    "ACT": "Активированное время свертывания",
+    "BILIRUBIN": "Общий билирубин",
+}
 
 COPY = {
     "en": {
-        "title": "DiagnoAI Pancreas | Clinical Report",
+        "report_title": "AI-Assisted Pancreatic Risk Assessment",
+        "tool_name": "DiagnoAI Pancreas",
         "generated_on": "Generated on",
-        "risk_label": "Risk level",
+        "risk_category_label": "Risk category",
         "probability_label": "Risk probability",
-        "audience_label": "Audience",
-        "language_label": "Language",
-        "risk_names": {"High": "HIGH RISK", "Moderate": "MODERATE RISK", "Low": "LOW RISK"},
-        "overview_title": "Clinical overview",
-        "overview": {
-            "High": "High-risk pattern detected. Confirm within 7 days (contrast CT/MRI, EUS-FNA if needed) and manage pain/obstruction in parallel.",
-            "Moderate": "Intermediate probability. Clarify in 2-4 weeks with pancreatic protocol imaging, tumor markers, and symptom-guided follow-up.",
-            "Low": "Low risk estimate. Maintain surveillance, reinforce prevention, and define clear triggers for earlier reassessment.",
+        "risk_names": {
+            "High": "HIGH RISK",
+            "Moderate": "MODERATE RISK",
+            "Low": "LOW RISK",
         },
-        "labs_title": "Laboratory snapshot",
-        "labs_caption": "Values shown as provided; verify units with the source laboratory.",
-        "shap_title": "Top SHAP drivers",
-        "shap_none": "SHAP analysis unavailable.",
+        "cover_interpretation": {
+            "High": "Risk estimate consistent with higher-risk population cohorts; supports expedited clinical review.",
+            "Moderate": "Risk estimate consistent with intermediate-risk population cohorts; supports targeted follow-up.",
+            "Low": "Risk estimate consistent with low-risk population cohorts; supports routine surveillance.",
+        },
+        "cover_meta_labels": {
+            "generated": "Generated",
+            "intended_use": "Intended use",
+            "audience": "Audience",
+            "disclaimer": "Legal disclaimer",
+        },
+        "cover_intended_use_value": "Clinical decision support",
+        "cover_disclaimer": "AI-assisted decision support; not diagnostic.",
+        "executive_title": "Executive Clinical Summary",
+        "executive_summary": {
+            "High": (
+                "The model estimates a {risk} category with an approximate probability of {probability}%. "
+                "This profile aligns with higher-risk cohorts and warrants prompt clinical review. "
+                "The estimate supports risk stratification and surveillance planning and does not establish a diagnosis."
+            ),
+            "Moderate": (
+                "The model estimates a {risk} category with an approximate probability of {probability}%. "
+                "This profile aligns with intermediate-risk cohorts and supports targeted follow-up. "
+                "The estimate supports risk stratification and surveillance planning and does not establish a diagnosis."
+            ),
+            "Low": (
+                "The model estimates a {risk} category with an approximate probability of {probability}%. "
+                "This profile aligns with low-risk cohorts and supports routine surveillance. "
+                "The estimate supports risk stratification and surveillance planning and does not establish a diagnosis."
+            ),
+        },
+        "context_title": "Patient / Audience Context",
+        "context_labels": {
+            "audience": "Intended audience",
+            "language": "Language",
+            "use": "Intended use",
+        },
+        "context_use_value": "Risk stratification & surveillance support",
+        "assessment_title": "Pancreatic Cancer Risk Assessment",
+        "assessment_interpretation": {
+            "High": "Interpretation: consistent with higher-risk population cohorts.",
+            "Moderate": "Interpretation: consistent with intermediate-risk population cohorts.",
+            "Low": "Interpretation: consistent with low-risk population cohorts.",
+        },
+        "labs_title": "Laboratory Results Summary",
+        "labs_columns": ["Test", "Value", "Reference range"],
+        "labs_caption": "Values shown as provided; verify units and reference ranges with the source laboratory.",
+        "explainability_title": "Key Model Contributors (Explainability Analysis)",
         "impact_labels": {
-            "positive": "raises risk",
-            "negative": "reduces risk pressure",
+            "positive": "increases risk contribution",
+            "negative": "decreases risk contribution",
             "neutral": "neutral influence",
         },
-        "commentary_title": "AI clinical commentary",
-        "commentary_empty": "AI commentary is not available for this audience.",
-        "actions_title": "Priority next steps",
-        "actions": {
-            "High": [
-                "Order contrast-enhanced CT or MRI within 7 days; add EUS-FNA if imaging is equivocal.",
-                "Trend tumor markers (CA 19-9, CEA) plus metabolic/coagulation panels.",
-                "Manage pain, nutrition, and biliary obstruction in parallel to diagnostics.",
-                "Engage hepatobiliary surgery and oncology early for joint planning.",
-            ],
-            "Moderate": [
-                "Schedule pancreatic protocol CT or MRI in 2-4 weeks based on symptoms.",
-                "Repeat labs and tumor markers sooner if values drift from baseline.",
-                "Document red-flag symptoms and provide expedited return precautions.",
-                "Coordinate follow-up with gastroenterology and primary care.",
-            ],
-            "Low": [
-                "Maintain routine surveillance; advance imaging if new symptoms emerge.",
-                "Reinforce lifestyle risk reduction and metabolic control.",
-                "Educate on warning signs that justify earlier clinical review.",
+        "impact_legend": "↑ increases risk contribution, ↓ decreases risk contribution, • neutral influence.",
+        "explainability_empty": "Explainability data is unavailable.",
+        "interpretation_title": "AI Clinical Interpretation",
+        "interpretation_empty": "No AI clinical interpretation is available for this audience.",
+        "recommendations_title": "Surveillance & Research Recommendations",
+        "recommendations_clinical": "Clinical Surveillance Guidance",
+        "recommendations_research": "Research & Data Collection Recommendations",
+        "recommendations": {
+            "clinical": {
+                "High": [
+                    "Arrange contrast-enhanced CT or MRI promptly; add EUS-FNA if imaging is equivocal.",
+                    "Trend tumor markers (CA 19-9, CEA) and key metabolic/coagulation panels.",
+                    "Address pain control, nutrition, and biliary obstruction in parallel with diagnostics.",
+                    "Coordinate hepatobiliary surgery and oncology input for integrated planning.",
+                ],
+                "Moderate": [
+                    "Schedule pancreatic-protocol CT or MRI within 2-4 weeks based on symptoms.",
+                    "Repeat labs and tumor markers if values deviate from baseline or symptoms evolve.",
+                    "Document red-flag symptoms and provide expedited return precautions.",
+                    "Coordinate follow-up with gastroenterology and primary care.",
+                ],
+                "Low": [
+                    "Maintain routine surveillance; advance imaging if new symptoms emerge.",
+                    "Reinforce lifestyle risk reduction and metabolic control.",
+                    "Provide education on warning signs that warrant earlier review.",
+                ],
+            },
+            "research": [
+                "Document family history, metabolic risk factors, and relevant exposures.",
+                "Capture longitudinal biomarkers and imaging outcomes for trend analysis.",
+                "Consider registry enrollment or research protocols where available.",
             ],
         },
-        "guideline_title": "Guideline references",
-        "footer": "AI-assisted decision support. Interpret alongside full clinical context and governing medical guidelines.",
+        "followup_title": "Follow-Up & Monitoring Framework",
+        "followup_rows": [
+            {
+                "label": "Biannual",
+                "text": "Clinical review of symptoms and laboratory trends; adjust surveillance based on changes.",
+            },
+            {
+                "label": "Annual",
+                "text": "Imaging review per clinical context and institutional protocol.",
+            },
+            {
+                "label": "Continuous",
+                "text": "Ongoing symptom monitoring, lifestyle risk mitigation, and care coordination.",
+            },
+        ],
+        "disclaimers_title": "Disclaimers & Governance",
+        "disclaimers_text": (
+            "This report provides AI-assisted decision support for risk stratification. "
+            "It does not diagnose pancreatic cancer and should be interpreted alongside full clinical context, "
+            "validated diagnostics, and institutional guidelines. Final responsibility for clinical decisions "
+            "remains with the treating clinician."
+        ),
         "client_labels": {
             "patient": "Patient",
             "clinician": "Clinician",
@@ -84,54 +186,127 @@ COPY = {
             "physician": "Clinician",
         },
         "language_names": {"en": "English", "ru": "Russian"},
+        "page_label": "Page",
     },
     "ru": {
-        "title": "DiagnoAI Pancreas | Клинический отчет",
+        "report_title": "AI-ассистированная оценка риска рака поджелудочной железы",
+        "tool_name": "DiagnoAI Pancreas",
         "generated_on": "Дата формирования",
-        "risk_label": "Уровень риска",
+        "risk_category_label": "Категория риска",
         "probability_label": "Вероятность риска",
-        "audience_label": "Аудитория",
-        "language_label": "Язык",
-        "risk_names": {"High": "ВЫСОКИЙ РИСК", "Moderate": "УМЕРЕННЫЙ РИСК", "Low": "НИЗКИЙ РИСК"},
-        "overview_title": "Клиническое резюме",
-        "overview": {
-            "High": "Выявлен высокий риск. Подтвердите в течение 7 дней (контрастный КТ/МРТ, при необходимости ЭУС‑ПНА) и параллельно контролируйте боль/обструкцию.",
-            "Moderate": "Промежуточная вероятность. Уточните в течение 2–4 недель с панкреатическим протоколом визуализации, маркерами опухоли и наблюдением по симптомам.",
-            "Low": "Низкая оценка риска. Поддерживайте наблюдение, усиливайте профилактику и заранее определите признаки для более раннего пересмотра.",
+        "risk_names": {
+            "High": "ВЫСОКИЙ РИСК",
+            "Moderate": "УМЕРЕННЫЙ РИСК",
+            "Low": "НИЗКИЙ РИСК",
         },
-        "labs_title": "Лабораторные показатели",
-        "labs_caption": "Значения указаны как предоставлены; сверяйте единицы измерения с лабораторией.",
-        "shap_title": "Основные драйверы SHAP",
-        "shap_none": "SHAP-анализ недоступен.",
+        "cover_interpretation": {
+            "High": "Оценка риска соответствует группам повышенного риска; требуется приоритетное клиническое рассмотрение.",
+            "Moderate": "Оценка риска соответствует группам промежуточного риска; поддерживает целевое наблюдение.",
+            "Low": "Оценка риска соответствует группам низкого риска; поддерживает рутинное наблюдение.",
+        },
+        "cover_meta_labels": {
+            "generated": "Дата формирования",
+            "intended_use": "Назначение",
+            "audience": "Аудитория",
+            "disclaimer": "Правовая оговорка",
+        },
+        "cover_intended_use_value": "Клиническая поддержка принятия решений",
+        "cover_disclaimer": "Поддержка решений на основе ИИ; не является диагнозом.",
+        "executive_title": "Клиническое резюме",
+        "executive_summary": {
+            "High": (
+                "Модель оценивает категорию {risk} с ориентировочной вероятностью {probability}%. "
+                "Профиль соответствует группам повышенного риска и требует приоритетного клинического рассмотрения. "
+                "Оценка предназначена для стратификации риска и планирования наблюдения и не устанавливает диагноз."
+            ),
+            "Moderate": (
+                "Модель оценивает категорию {risk} с ориентировочной вероятностью {probability}%. "
+                "Профиль соответствует группам промежуточного риска и поддерживает целевое наблюдение. "
+                "Оценка предназначена для стратификации риска и планирования наблюдения и не устанавливает диагноз."
+            ),
+            "Low": (
+                "Модель оценивает категорию {risk} с ориентировочной вероятностью {probability}%. "
+                "Профиль соответствует группам низкого риска и поддерживает рутинное наблюдение. "
+                "Оценка предназначена для стратификации риска и планирования наблюдения и не устанавливает диагноз."
+            ),
+        },
+        "context_title": "Контекст пациента / аудитории",
+        "context_labels": {
+            "audience": "Целевая аудитория",
+            "language": "Язык",
+            "use": "Назначение",
+        },
+        "context_use_value": "Стратификация риска и поддержка наблюдения",
+        "assessment_title": "Оценка риска рака поджелудочной железы",
+        "assessment_interpretation": {
+            "High": "Интерпретация: соответствует группам повышенного риска.",
+            "Moderate": "Интерпретация: соответствует группам промежуточного риска.",
+            "Low": "Интерпретация: соответствует группам низкого риска.",
+        },
+        "labs_title": "Сводка лабораторных результатов",
+        "labs_columns": ["Показатель", "Значение", "Референсный диапазон"],
+        "labs_caption": "Значения приведены как предоставлены; единицы и диапазоны следует сверить с лабораторией.",
+        "explainability_title": "Ключевые факторы модели (анализ интерпретируемости)",
         "impact_labels": {
-            "positive": "повышает риск",
-            "negative": "снижает риск",
+            "positive": "повышает вклад в риск",
+            "negative": "снижает вклад в риск",
             "neutral": "нейтральное влияние",
         },
-        "commentary_title": "Клинический комментарий ИИ",
-        "commentary_empty": "Комментарий ИИ недоступен для этой аудитории.",
-        "actions_title": "Приоритетные действия",
-        "actions": {
-            "High": [
-                "Выполнить контрастную КТ/МРТ в течение 7 дней; при неясности добавить ЭУС‑ПНА.",
-                "Отслеживать опухолевые маркеры (CA 19-9, CEA), метаболические и коагуляционные панели.",
-                "Параллельно контролировать боль, питание и билиарную обструкцию.",
-                "Раннее вовлечение гепатобилиарного хирурга и онколога для совместного планирования.",
-            ],
-            "Moderate": [
-                "Запланировать панкреатический протокол КТ/МРТ через 2–4 недели в зависимости от симптомов.",
-                "Повторять лабораторные анализы и маркеры при изменении от исходных значений.",
-                "Задокументировать тревожные симптомы и обеспечить ускоренный возврат при их появлении.",
-                "Координировать наблюдение с гастроэнтерологом и лечащим врачом.",
-            ],
-            "Low": [
-                "Поддерживать рутинное наблюдение; ускорить визуализацию при новых симптомах.",
-                "Усиливать профилактику и контроль метаболических факторов риска.",
-                "Обучить предупреждающим признакам для более раннего обращения.",
+        "impact_legend": "↑ повышает вклад в риск, ↓ снижает вклад в риск, • нейтральное влияние.",
+        "explainability_empty": "Данные интерпретируемости недоступны.",
+        "interpretation_title": "Клиническая интерпретация ИИ",
+        "interpretation_empty": "Клиническая интерпретация ИИ для этой аудитории недоступна.",
+        "recommendations_title": "Рекомендации по наблюдению и исследовательским данным",
+        "recommendations_clinical": "Клиническое наблюдение",
+        "recommendations_research": "Рекомендации по исследованиям и сбору данных",
+        "recommendations": {
+            "clinical": {
+                "High": [
+                    "Организовать контрастное КТ или МРТ в ближайшее время; при сомнительных результатах добавить ЭУС-ТАБ.",
+                    "Отслеживать опухолевые маркеры (CA 19-9, CEA) и ключевые метаболические/коагуляционные показатели.",
+                    "Параллельно с диагностикой вести контроль боли, питания и билиарной обструкции.",
+                    "Согласовать план с гепатобилиарной хирургией и онкологией.",
+                ],
+                "Moderate": [
+                    "Запланировать КТ/МРТ по панкреатическому протоколу в течение 2-4 недель с учетом симптомов.",
+                    "Повторить лабораторные показатели и маркеры при отклонении от базовых значений или изменении симптомов.",
+                    "Зафиксировать тревожные симптомы и дать ускоренные инструкции по повторному обращению.",
+                    "Координировать наблюдение с гастроэнтерологом и врачом первичного звена.",
+                ],
+                "Low": [
+                    "Поддерживать рутинное наблюдение; ускорить визуализацию при появлении новых симптомов.",
+                    "Усилить модификацию образа жизни и контроль метаболических факторов.",
+                    "Обучить признакам, требующим более раннего клинического контроля.",
+                ],
+            },
+            "research": [
+                "Зафиксировать семейный анамнез, метаболические факторы риска и значимые экспозиции.",
+                "Собирать продольные биомаркеры и результаты визуализации для анализа динамики.",
+                "Рассмотреть включение в регистры или исследовательские протоколы при наличии.",
             ],
         },
-        "guideline_title": "Рекомендации",
-        "footer": "Поддержка принятия решений с помощью ИИ. Интерпретируйте с учетом клинического контекста и медицинских руководств.",
+        "followup_title": "План наблюдения и мониторинга",
+        "followup_rows": [
+            {
+                "label": "Каждые 6 месяцев",
+                "text": "Полугодовой клинический осмотр, контроль симптомов и лабораторных трендов; корректировка наблюдения при изменениях.",
+            },
+            {
+                "label": "Ежегодно",
+                "text": "Ежегодный пересмотр визуализации в соответствии с клиническим контекстом и протоколами учреждения.",
+            },
+            {
+                "label": "Постоянно",
+                "text": "Непрерывный мониторинг симптомов, снижение факторов риска и координация лечения.",
+            },
+        ],
+        "disclaimers_title": "Оговорки и ответственность",
+        "disclaimers_text": (
+            "Данный отчет предоставляет поддержку принятия решений на основе ИИ для стратификации риска. "
+            "Он не диагностирует рак поджелудочной железы и должен интерпретироваться с учетом полного клинического контекста, "
+            "подтвержденных диагностических методов и локальных регламентов. Окончательная ответственность за клинические решения "
+            "остается за лечащим врачом."
+        ),
         "client_labels": {
             "patient": "Пациент",
             "clinician": "Клиницист",
@@ -139,29 +314,56 @@ COPY = {
             "physician": "Врач",
         },
         "language_names": {"en": "Английский", "ru": "Русский"},
+        "page_label": "Страница",
     },
 }
 
 
+class ReportPDF(FPDF):
+    def __init__(self) -> None:
+        super().__init__()
+        self.report_title = ""
+        self.footer_label = "Page"
+        self.font_family = "Helvetica"
+        self.unicode_ready = False
+
+    def header(self) -> None:
+        if self.page_no() == 1:
+            return
+        self.set_font(self.font_family, "B", 9)
+        self.set_text_color(*PALETTE["muted"])
+        self.cell(0, 6, _safe(self.report_title, self.unicode_ready), ln=1)
+        self.set_draw_color(*PALETTE["border"])
+        self.set_line_width(0.2)
+        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+        self.ln(2)
+
+    def footer(self) -> None:
+        if self.page_no() == 1:
+            return
+        self.set_y(-12)
+        self.set_font(self.font_family, "", 8)
+        self.set_text_color(*PALETTE["muted"])
+        label = f"{self.footer_label} {self.page_no()}/{{nb}}"
+        self.cell(0, 6, _safe(label, self.unicode_ready), align="C")
+
+
 def _ensure_unicode_font(pdf: FPDF) -> Tuple[str, bool]:
-    """Load Times New Roman if available so Cyrillic renders correctly (with fallback)."""
+    """Load DejaVu Sans if available so Cyrillic renders correctly (with fallback)."""
     fonts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fonts"))
     candidates = [
+        os.path.join(fonts_dir, "DejaVuSans.ttf"),
         os.path.join(fonts_dir, "TimesNewRoman.ttf"),
         os.path.join(fonts_dir, "Times New Roman.ttf"),
         os.path.join(fonts_dir, "times.ttf"),
-        os.path.join(fonts_dir, "DejaVuSans.ttf"),  # fallback to legacy font if Times New Roman is absent
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # system font inside container
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
-    # Use a fresh font name to avoid picking up stale cache PKL files with wrong absolute paths.
-    font_name = "ReportSerifDyn"
+    font_name = "ReportSansDyn"
     for ttf_path in candidates:
         try:
             if os.path.exists(ttf_path):
-                # Verify file is readable before registering to avoid runtime errors.
                 with open(ttf_path, "rb"):
                     pass
-                # If a cached PKL exists but points to a missing TTF (e.g., host Windows path), delete it to force rebuild.
                 pkl_path = os.path.splitext(ttf_path)[0] + ".pkl"
                 if os.path.exists(pkl_path):
                     try:
@@ -169,7 +371,9 @@ def _ensure_unicode_font(pdf: FPDF) -> Tuple[str, bool]:
 
                         with open(pkl_path, "rb") as f:
                             meta = pickle.load(f)
-                        missing = isinstance(meta, dict) and not os.path.exists(str(meta.get("ttffile", "")))
+                        missing = isinstance(meta, dict) and not os.path.exists(
+                            str(meta.get("ttffile", ""))
+                        )
                     except Exception:
                         missing = False
                     if missing:
@@ -208,18 +412,28 @@ def _normalize_risk(risk: Any, probability: float) -> str:
     return "Low"
 
 
-def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]) -> BytesIO:
-    """Create a medical-grade bilingual PDF with clear clinical structure."""
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=18)
-    pdf.add_page()
-
+def generate_pdf_report(
+    self, patient_inputs: Dict[str, Any], analysis: Dict[str, Any]
+) -> BytesIO:
+    """Create a medical-grade bilingual PDF with formal clinical structure."""
+    pdf = ReportPDF()
     font_family, unicode_ready = _ensure_unicode_font(pdf)
-    content_width = pdf.w - pdf.l_margin - pdf.r_margin
 
     language_code = str(analysis.get("language") or "en").lower()
     locale = "ru" if language_code.startswith("ru") else "en"
     copy = COPY.get(locale, COPY["en"])
+
+    pdf.font_family = font_family
+    pdf.unicode_ready = unicode_ready
+    pdf.report_title = copy["report_title"]
+    pdf.footer_label = copy["page_label"]
+
+    pdf.set_margins(16, 18, 16)
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    content_width = pdf.w - pdf.l_margin - pdf.r_margin
 
     client_type = str(analysis.get("client_type") or "patient").lower()
     client_display = copy["client_labels"].get(client_type, client_type.title())
@@ -229,98 +443,179 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
     except (TypeError, ValueError):
         probability_pct = 0.0
     risk_level = _normalize_risk(analysis.get("risk_level"), probability_pct / 100.0)
-    risk_color = RISK_COLORS.get(risk_level, PALETTE["primary"])
-    risk_names = copy.get("risk_names") or {"High": "HIGH RISK", "Moderate": "MODERATE RISK", "Low": "LOW RISK"}
+    risk_color = RISK_COLORS.get(risk_level, PALETTE["accent"])
+    risk_names = copy.get("risk_names") or {
+        "High": "HIGH RISK",
+        "Moderate": "MODERATE RISK",
+        "Low": "LOW RISK",
+    }
     risk_name_display = risk_names.get(risk_level, risk_level)
 
-    def section_header(title: str, fill=(241, 245, 249)) -> None:
-        pdf.set_font(font_family, "B", 12)
-        pdf.set_fill_color(*fill)
-        pdf.set_text_color(*PALETTE["neutral"])
-        pdf.cell(0, 9, _safe(title, unicode_ready), ln=True, fill=True)
-        pdf.ln(1)
-
-    def muted_caption(text: str) -> None:
-        pdf.set_font(font_family, "I", 9)
-        pdf.set_text_color(*PALETTE["muted"])
-        pdf.multi_cell(content_width, 5, _safe(text, unicode_ready))
-        pdf.set_text_color(*PALETTE["neutral"])
-
-    def divider() -> None:
+    def section_title(title: str) -> None:
+        pdf.set_font(font_family, "B", 10.5)
+        pdf.set_text_color(*PALETTE["accent"])
+        pdf.cell(0, 6, _safe(title.upper(), unicode_ready), ln=1)
         pdf.set_draw_color(*PALETTE["border"])
-        pdf.set_line_width(0.3)
+        pdf.set_line_width(0.2)
         pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
         pdf.ln(3)
 
-    # Masthead with badge
-    masthead_h = 34
-    x0 = pdf.l_margin
-    y0 = pdf.get_y()
-    pdf.set_fill_color(*PALETTE["panel"])
-    pdf.rect(x0, y0, content_width, masthead_h, "F")
-    pdf.set_xy(x0 + 8, y0 + 8)
-    pdf.set_font(font_family, "B", 15)
-    pdf.set_text_color(*PALETTE["neutral"])
-    pdf.cell(content_width - 60, 8, _safe(copy["title"], unicode_ready), ln=1)
-    pdf.set_x(x0 + 8)
+    def bullet_list(items: list[str]) -> None:
+        pdf.set_font(font_family, "", 10)
+        pdf.set_text_color(*PALETTE["neutral"])
+        for item in items:
+            pdf.set_x(pdf.l_margin + 2)
+            pdf.cell(4, 5, _safe("•", unicode_ready), ln=0)
+            pdf.multi_cell(content_width - 6, 5, _safe(item, unicode_ready))
+        pdf.ln(1)
+
+    # Cover page
+    cover_top = pdf.t_margin
+    cover_bottom = pdf.h - pdf.b_margin
+    cover_height = cover_bottom - cover_top
+    top_end = cover_top + cover_height * 0.2
+    mid_end = cover_top + cover_height * 0.8
+
+    pdf.set_y(cover_top + 6)
     pdf.set_font(font_family, "", 10)
     pdf.set_text_color(*PALETTE["muted"])
-    pdf.cell(content_width - 60, 6, _safe(f"{copy['generated_on']}: {datetime.now().strftime('%Y-%m-%d %H:%M')}", unicode_ready), ln=1)
-
-    # Risk pill on the right
-    pill_w, pill_h = 56, 16
-    pill_x = x0 + content_width - pill_w - 6
-    pill_y = y0 + 9
-    pdf.set_fill_color(*risk_color)
-    pdf.set_text_color(255, 255, 255)
-    pdf.rect(pill_x, pill_y, pill_w, pill_h, "F")
-    pdf.set_xy(pill_x, pill_y + 3)
-    pdf.set_font(font_family, "B", 11)
-    pdf.cell(pill_w, 6, _safe(risk_name_display.upper(), unicode_ready), ln=0, align="C")
-
-    pdf.set_y(y0 + masthead_h + 6)
+    pdf.cell(0, 5, _safe(copy["tool_name"], unicode_ready), ln=1)
+    pdf.set_font(font_family, "B", 18)
     pdf.set_text_color(*PALETTE["neutral"])
+    pdf.multi_cell(content_width, 8, _safe(copy["report_title"], unicode_ready))
 
-    # Key facts row
-    cards = [
-        (copy["probability_label"], f"{probability_pct:.1f}%", PALETTE["primary"]),
-        (copy["audience_label"], f"{client_display} / {copy['language_names'].get(locale, locale)}", PALETTE["neutral"]),
-    ]
-    card_gap = 6
-    card_width = (content_width - card_gap) / 2
-    card_height = 24
-    row_y = pdf.get_y()
-    pdf.set_draw_color(*PALETTE["border"])
-    for idx, (label, value, accent) in enumerate(cards):
-        card_x = pdf.l_margin + idx * (card_width + card_gap)
-        pdf.set_fill_color(248, 250, 252)
-        pdf.rect(card_x, row_y, card_width, card_height, "FD")
-        pdf.set_xy(card_x + 6, row_y + 4)
-        pdf.set_font(font_family, "", 9)
-        pdf.set_text_color(*PALETTE["muted"])
-        pdf.cell(card_width - 12, 5, _safe(label.upper(), unicode_ready))
-        pdf.set_xy(card_x + 6, row_y + 11)
-        pdf.set_font(font_family, "B", 12)
-        pdf.set_text_color(*accent)
-        pdf.cell(card_width - 12, 6, _safe(value, unicode_ready))
-    pdf.set_y(row_y + card_height + 8)
+    module_block_h = 60
+    module_top = top_end + max(0, (mid_end - top_end - module_block_h) / 2)
+    pdf.set_y(max(pdf.get_y(), module_top))
+    pdf.set_font(font_family, "B", 34)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.cell(0, 12, _safe(f"{probability_pct:.1f}%", unicode_ready), ln=1, align="C")
+    pdf.set_font(font_family, "B", 11)
+    pdf.set_text_color(*PALETTE["accent"])
+    pdf.cell(0, 6, _safe(risk_name_display, unicode_ready), ln=1, align="C")
 
-    # Clinical synopsis
-    section_header(copy["overview_title"], fill=(239, 246, 255))
-    pdf.set_font(font_family, "", 11)
-    pdf.multi_cell(content_width, 6, _safe(copy["overview"].get(risk_level, ""), unicode_ready))
-    pdf.ln(2)
-    divider()
-
-    # Labs table (striped)
-    section_header(copy["labs_title"], fill=(241, 245, 249))
-    pdf.set_font(font_family, "B", 10)
-    pdf.set_fill_color(248, 250, 252)
+    bar_width = content_width * 0.55
+    bar_x = pdf.l_margin + (content_width - bar_width) / 2
+    bar_y = pdf.get_y() + 4
+    bar_h = 4
+    pdf.set_fill_color(*PALETTE["border"])
+    pdf.rect(bar_x, bar_y, bar_width, bar_h, "F")
+    fill_w = max(2, min(bar_width, bar_width * (probability_pct / 100.0)))
+    pdf.set_fill_color(*PALETTE["accent"])
+    pdf.rect(bar_x, bar_y, fill_w, bar_h, "F")
+    pdf.set_y(bar_y + bar_h + 6)
+    pdf.set_font(font_family, "", 10)
     pdf.set_text_color(*PALETTE["muted"])
-    pdf.cell(content_width * 0.65, 7, _safe("Test", unicode_ready), ln=0, fill=True)
-    pdf.cell(content_width * 0.35, 7, _safe("Value", unicode_ready), ln=1, fill=True)
+    cover_note = copy["cover_interpretation"].get(risk_level, "")
+    if cover_note:
+        pdf.multi_cell(content_width, 5, _safe(cover_note, unicode_ready), align="C")
 
+    pdf.set_y(mid_end + 4)
+    pdf.set_font(font_family, "", 9)
+    pdf.set_text_color(*PALETTE["muted"])
+    cover_labels = copy["cover_meta_labels"]
+    pdf.cell(
+        0,
+        5,
+        _safe(f"{cover_labels['generated']}: {datetime.now().strftime('%Y-%m-%d %H:%M')}", unicode_ready),
+        ln=1,
+    )
+    pdf.cell(
+        0,
+        5,
+        _safe(f"{cover_labels['intended_use']}: {copy['cover_intended_use_value']}", unicode_ready),
+        ln=1,
+    )
+    pdf.cell(
+        0,
+        5,
+        _safe(f"{cover_labels['audience']}: {client_display}", unicode_ready),
+        ln=1,
+    )
+    pdf.multi_cell(
+        content_width,
+        5,
+        _safe(f"{cover_labels['disclaimer']}: {copy['cover_disclaimer']}", unicode_ready),
+    )
+
+    pdf.add_page()
+
+    # Executive summary
+    section_title(copy["executive_title"])
+    summary_template = copy["executive_summary"].get(risk_level, "")
+    summary_text = summary_template.format(
+        probability=f"{probability_pct:.1f}",
+        risk=risk_name_display,
+    )
+    pdf.set_font(font_family, "", 11)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.multi_cell(content_width, 6, _safe(summary_text, unicode_ready))
+    pdf.ln(2)
+
+    # Context
+    section_title(copy["context_title"])
+    context_rows = [
+        (copy["context_labels"]["audience"], client_display),
+        (copy["context_labels"]["language"], copy["language_names"].get(locale, locale)),
+        (copy["context_labels"]["use"], copy["context_use_value"]),
+    ]
+    for label, value in context_rows:
+        pdf.set_font(font_family, "B", 9)
+        pdf.set_text_color(*PALETTE["muted"])
+        pdf.cell(content_width * 0.32, 6, _safe(label, unicode_ready))
+        pdf.set_font(font_family, "", 10)
+        pdf.set_text_color(*PALETTE["neutral"])
+        pdf.cell(content_width * 0.68, 6, _safe(value, unicode_ready), ln=1)
+    pdf.ln(2)
+
+    # Risk assessment overview
+    section_title(copy["assessment_title"])
+    pdf.set_font(font_family, "B", 11)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.cell(
+        0,
+        6,
+        _safe(f"{copy['risk_category_label']}: {risk_name_display}", unicode_ready),
+        ln=1,
+    )
     pdf.set_font(font_family, "", 10.5)
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.cell(
+        0,
+        5,
+        _safe(f"{copy['probability_label']}: {probability_pct:.1f}%", unicode_ready),
+        ln=1,
+    )
+    pdf.set_fill_color(*PALETTE["border"])
+    pdf.rect(pdf.l_margin, pdf.get_y() + 1, content_width, 4, "F")
+    pdf.set_fill_color(*risk_color)
+    pdf.rect(
+        pdf.l_margin,
+        pdf.get_y() + 1,
+        max(2, min(content_width, content_width * (probability_pct / 100.0))),
+        4,
+        "F",
+    )
+    pdf.ln(7)
+    assessment_note = copy["assessment_interpretation"].get(risk_level, "")
+    if assessment_note:
+        pdf.set_font(font_family, "", 10.5)
+        pdf.set_text_color(*PALETTE["muted"])
+        pdf.multi_cell(content_width, 5, _safe(assessment_note, unicode_ready))
+    pdf.ln(1)
+
+    # Labs table
+    section_title(copy["labs_title"])
+    col1 = content_width * 0.46
+    col2 = content_width * 0.18
+    col3 = content_width - col1 - col2
+    pdf.set_font(font_family, "B", 9)
+    pdf.set_fill_color(*PALETTE["soft"])
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.cell(col1, 7, _safe(copy["labs_columns"][0], unicode_ready), 0, 0, fill=True)
+    pdf.cell(col2, 7, _safe(copy["labs_columns"][1], unicode_ready), 0, 0, fill=True)
+    pdf.cell(col3, 7, _safe(copy["labs_columns"][2], unicode_ready), 0, 1, fill=True)
+    pdf.set_font(font_family, "", 10)
     pdf.set_text_color(*PALETTE["neutral"])
     feature_order = [
         "wbc",
@@ -337,7 +632,9 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
         "act",
         "bilirubin",
     ]
-    label_map = FEATURE_LABELS.get(locale, FEATURE_LABELS["en"])
+    label_map = FEATURE_LABELS.get("en", FEATURE_LABELS["en"])
+    if locale == "ru":
+        label_map = RU_LAB_LABELS
     row_fill = False
     for key in feature_order:
         label = label_map.get(key.upper(), key.upper())
@@ -346,77 +643,115 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
             value = f"{float(raw_value):.2f}"
         except (TypeError, ValueError):
             value = "N/A" if raw_value is None else str(raw_value)
+        range_text = ""
+        if key in MEDICAL_RANGES:
+            min_val, max_val = MEDICAL_RANGES[key]
+            range_text = f"{min_val}-{max_val}"
         if row_fill:
-            pdf.set_fill_color(248, 250, 252)
+            pdf.set_fill_color(249, 250, 251)
         else:
             pdf.set_fill_color(255, 255, 255)
-        pdf.cell(content_width * 0.65, 7, _safe(label, unicode_ready), ln=0, fill=True)
-        pdf.cell(content_width * 0.35, 7, _safe(value, unicode_ready), ln=1, fill=True)
+        pdf.cell(col1, 7, _safe(label, unicode_ready), 0, 0, fill=True)
+        pdf.cell(col2, 7, _safe(value, unicode_ready), 0, 0, fill=True)
+        pdf.cell(col3, 7, _safe(range_text, unicode_ready), 0, 1, fill=True)
         row_fill = not row_fill
-
     pdf.ln(1)
-    muted_caption(copy["labs_caption"])
+    pdf.set_font(font_family, "I", 9)
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.multi_cell(content_width, 5, _safe(copy["labs_caption"], unicode_ready))
     pdf.ln(2)
-    divider()
 
-    # SHAP drivers (concise list)
-    section_header(copy["shap_title"], fill=(241, 245, 249))
-    pdf.set_font(font_family, "", 10.5)
+    # Explainability
+    section_title(copy["explainability_title"])
+    pdf.set_font(font_family, "", 9)
+    pdf.set_text_color(*PALETTE["muted"])
+    pdf.multi_cell(content_width, 5, _safe(copy["impact_legend"], unicode_ready))
+    pdf.ln(1)
+    pdf.set_font(font_family, "", 10)
+    pdf.set_text_color(*PALETTE["neutral"])
     shap_values = analysis.get("shap_values") or analysis.get("shapValues") or []
+    if isinstance(shap_values, dict):
+        shap_values = [shap_values]
     impact_labels = copy["impact_labels"]
+    direction_map = {"positive": "↑", "negative": "↓", "neutral": "•"}
     if shap_values:
-        for idx, item in enumerate(shap_values[:5], start=1):
+        for item in shap_values[:5]:
             feature = str(item.get("feature", "Unknown"))
             label = label_map.get(feature.upper(), feature)
-            impact = impact_labels.get(str(item.get("impact", "neutral")).lower(), impact_labels["neutral"])
+            impact_key = str(item.get("impact", "neutral")).lower()
+            impact = impact_labels.get(impact_key, impact_labels["neutral"])
+            direction = direction_map.get(impact_key, "•")
             val = item.get("value", 0)
             try:
                 val_str = f"{float(val):+.3f}"
             except (TypeError, ValueError):
                 val_str = str(val)
-            line = f"{idx}. {label} ({impact}): {val_str}"
-            pdf.multi_cell(content_width, 6, _safe(line, unicode_ready))
+            line = f"{direction} {label}: {impact} ({val_str})"
+            pdf.multi_cell(content_width, 5, _safe(line, unicode_ready))
     else:
-        pdf.multi_cell(content_width, 6, _safe(copy["shap_none"], unicode_ready))
-    pdf.ln(2)
-    divider()
+        pdf.multi_cell(content_width, 5, _safe(copy["explainability_empty"], unicode_ready))
+    pdf.ln(1)
 
-    # Commentary
-    commentary = analysis.get("ai_explanation") or analysis.get("aiExplanation") or ""
-    commentary = repair_text_encoding(commentary or "")
-    section_header(copy["commentary_title"], fill=(239, 246, 255))
-    pdf.set_font(font_family, "", 10.5)
+    # AI interpretation
+    section_title(copy["interpretation_title"])
+    commentary_source = ""
+    audience_commentaries = analysis.get("audience_commentaries") or {}
+    audience_by_lang = analysis.get("audience_commentaries_by_lang") or {}
+    commentary_source = (
+        audience_by_lang.get(f"{locale}:{client_type}")
+        or audience_commentaries.get(client_type)
+        or analysis.get("ai_explanation")
+        or analysis.get("aiExplanation")
+        or ""
+    )
+    commentary = repair_text_encoding(commentary_source or "")
+    pdf.set_font(font_family, "", 10)
+    pdf.set_text_color(*PALETTE["neutral"])
     if commentary.strip():
-        pdf.set_fill_color(250, 253, 255)
-        pdf.set_text_color(45, 55, 72)
         for paragraph in [p.strip() for p in commentary.split("\n") if p.strip()]:
-            pdf.multi_cell(content_width, 6, _safe(paragraph, unicode_ready), fill=True)
-            pdf.ln(1)
-        pdf.set_text_color(*PALETTE["neutral"])
+            pdf.multi_cell(content_width, 5.5, _safe(paragraph, unicode_ready))
+            pdf.ln(0.5)
     else:
-        pdf.multi_cell(content_width, 6, _safe(copy["commentary_empty"], unicode_ready))
-    pdf.ln(2)
-    divider()
+        pdf.multi_cell(content_width, 5.5, _safe(copy["interpretation_empty"], unicode_ready))
+    pdf.ln(1)
 
-    # Actions
-    actions = copy["actions"].get(risk_level, [])
-    if actions:
-        section_header(copy["actions_title"], fill=(241, 245, 249))
-        pdf.set_font(font_family, "", 10.5)
-        pdf.set_text_color(*PALETTE["neutral"])
-        for action in actions:
-            pdf.cell(5, 6, _safe("•", unicode_ready), ln=0)
-            pdf.multi_cell(content_width - 6, 6, _safe(action, unicode_ready))
-        pdf.ln(2)
-        divider()
+    # Recommendations
+    section_title(copy["recommendations_title"])
+    pdf.set_font(font_family, "B", 10)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.cell(0, 5, _safe(copy["recommendations_clinical"], unicode_ready), ln=1)
+    bullet_list(copy["recommendations"]["clinical"].get(risk_level, []))
+    pdf.set_font(font_family, "B", 10)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.cell(0, 5, _safe(copy["recommendations_research"], unicode_ready), ln=1)
+    bullet_list(copy["recommendations"]["research"])
 
-    # Footer
-    pdf.set_font(font_family, "I", 9)
-    pdf.set_text_color(*PALETTE["muted"])
-    pdf.multi_cell(content_width, 5, _safe(copy["footer"], unicode_ready))
+    # Follow-up framework
+    section_title(copy["followup_title"])
+    pdf.set_font(font_family, "", 10)
+    pdf.set_text_color(*PALETTE["neutral"])
+    row_fill = False
+    left_w = content_width * 0.28
+    right_w = content_width - left_w
+    for row in copy["followup_rows"]:
+        if row_fill:
+            pdf.set_fill_color(249, 250, 251)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        pdf.set_font(font_family, "B", 9.5)
+        pdf.cell(left_w, 8, _safe(row["label"], unicode_ready), 0, 0, fill=True)
+        pdf.set_font(font_family, "", 9.5)
+        pdf.multi_cell(right_w, 8, _safe(row["text"], unicode_ready), fill=True)
+        row_fill = not row_fill
+    pdf.ln(1)
+
+    # Disclaimers
+    section_title(copy["disclaimers_title"])
+    pdf.set_font(font_family, "", 9.5)
+    pdf.set_text_color(*PALETTE["neutral"])
+    pdf.multi_cell(content_width, 5.5, _safe(copy["disclaimers_text"], unicode_ready))
 
     pdf_bytes = pdf.output(dest="S").encode("latin-1")
     buffer = BytesIO(pdf_bytes)
     buffer.seek(0)
     return buffer
-
