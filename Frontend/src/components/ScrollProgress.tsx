@@ -79,7 +79,7 @@ export default function ScrollProgress({
   }, []);
 
   return (
-    <div className="pointer-events-auto fixed left-5 top-1/2 z-40 flex -translate-y-1/2 flex-col items-start gap-3 text-[10px] uppercase tracking-[0.4em] text-[var(--muted)]">
+    <div className="pointer-events-auto fixed left-5 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-start gap-3 text-[10px] uppercase tracking-[0.4em] text-[var(--muted)] lg:flex">
       {SECTIONS.map((section) => {
         const active = activeSection === section.id;
         const label = t(section.labelKey);

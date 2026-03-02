@@ -73,10 +73,10 @@ function HomeSection({
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="pt-20 pb-10"
+        className="pt-28 pb-16"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
+          <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-14 xl:gap-20 items-center">
             <div className="space-y-8">
               <div className="inline-flex items-center gap-3 rounded-full border border-[var(--border)] px-4 py-2 text-xs uppercase tracking-[0.35em] text-[var(--muted)]">
                 <span className="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_12px_var(--accent)]" />
@@ -84,7 +84,7 @@ function HomeSection({
               </div>
 
               <div className="space-y-4">
-                <h1 className="font-display text-4xl md:text-6xl xl:text-7xl font-black leading-[0.95]">
+                <h1 className="font-display text-3xl md:text-5xl xl:text-6xl font-black leading-[1.05] break-words hyphens-auto">
                   <span className="text-[var(--accent)]">{t("home_brand")}</span>
                   <span className="block text-[var(--text)]">{t("home_hero_title")}</span>
                 </h1>
@@ -116,7 +116,7 @@ function HomeSection({
               </div>
             </div>
 
-            <div className="card-sleek rounded-3xl p-6 space-y-6">
+            <div className="card-sleek rounded-3xl p-8 space-y-8">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
@@ -152,32 +152,32 @@ function HomeSection({
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs text-[var(--muted)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                  <p className="text-[10px] leading-tight text-[var(--muted)] mb-2 min-h-[2rem]">
                     {t("home_stat_sensitivity")}
                   </p>
                   <p className="text-2xl font-bold text-[var(--text)]">
                     <AnimatedNumber value={sensitivity} suffix="%" />
                   </p>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs text-[var(--muted)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                  <p className="text-[10px] leading-tight text-[var(--muted)] mb-2 min-h-[2rem]">
                     {t("home_stat_specificity")}
                   </p>
                   <p className="text-2xl font-bold text-[var(--text)]">
                     <AnimatedNumber value={specificity} suffix="%" />
                   </p>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs text-[var(--muted)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                  <p className="text-[10px] leading-tight text-[var(--muted)] mb-2 min-h-[2rem]">
                     {t("home_stat_latency")}
                   </p>
                   <p className="text-2xl font-bold text-[var(--text)]">
                     <AnimatedNumber value={latencySeconds} suffix="s" />
                   </p>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs text-[var(--muted)]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                  <p className="text-[10px] leading-tight text-[var(--muted)] mb-2 min-h-[2rem]">
                     {t("home_stat_sites")}
                   </p>
                   <p className="text-2xl font-bold text-[var(--text)]">
@@ -195,20 +195,21 @@ function HomeSection({
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, amount: 0.2 }}
-        className="py-10"
+        className="py-16"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="section-divider mb-16" />
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             {stats.map(({ label, value, suffix, icon: Icon }) => (
               <div
                 key={label}
-                className="card-sleek rounded-2xl p-5 flex flex-col gap-4"
+                className="card-sleek rounded-2xl p-6 flex flex-col gap-4"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-[0.3em] text-[var(--muted)]">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--muted)] leading-tight">
                     {label}
                   </span>
-                  <Icon className="h-5 w-5 text-[var(--accent)]" />
+                  <Icon className="h-5 w-5 shrink-0 text-[var(--accent)]" />
                 </div>
                 <div className="text-3xl font-bold text-[var(--text)]">
                   <AnimatedNumber value={value} suffix={suffix} />
@@ -227,10 +228,10 @@ function HomeSection({
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, amount: 0.2 }}
-        className="py-16"
+        className="py-20"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="card-sleek neon-border rounded-3xl px-8 py-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+          <div className="card-sleek neon-border rounded-3xl px-10 py-14 flex flex-col lg:flex-row items-center justify-between gap-10">
             <div className="space-y-2 text-center lg:text-left">
               <p className="text-sm uppercase tracking-[0.35em] text-[var(--muted)]">
                 {t("home_feature_title")}

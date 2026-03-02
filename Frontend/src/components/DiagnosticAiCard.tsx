@@ -43,20 +43,20 @@ export default function DiagnosticAiCard(
   return (
     <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_85%,transparent)] p-6 md:p-7 space-y-5 shadow-[0_18px_50px_rgba(0,0,0,0.2)]">
       <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_top,rgba(29,185,84,0.18),transparent_60%),radial-gradient(circle_at_bottom,rgba(181,140,255,0.18),transparent_55%)]" />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-4">
         <div>
           <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
-            <Brain className="h-5 w-5 text-[var(--accent)]" />
+            <Brain className="h-5 w-5 shrink-0 text-[var(--accent)]" />
             {t("ai_title")}
           </h3>
         </div>
-        <div className="flex flex-col gap-3 w-full lg:w-auto">
+        <div className="flex flex-col gap-3 w-full">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 min-w-0 flex-1">
               <span className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--muted)] font-semibold">
                 {t("audience")}
               </span>
-              <div className="relative inline-flex w-full max-w-[360px] rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] p-1.5 shadow-sm backdrop-blur">
+              <div className="relative inline-flex w-full max-w-full rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] p-1.5 shadow-sm backdrop-blur">
                 <span
                   className="absolute inset-y-1 rounded-xl bg-[var(--accent)] shadow-[0_12px_28px_rgba(29,185,84,0.25)] transition-all duration-300 ease-out"
                   style={{
@@ -72,7 +72,7 @@ export default function DiagnosticAiCard(
                       type="button"
                       onClick={() => setClientType(audience.id)}
                       aria-pressed={active}
-                      className={`relative z-10 flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                      className={`relative z-10 flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${
                         active
                           ? "text-black"
                           : "text-[var(--muted)] hover:text-[var(--text)]"
@@ -89,7 +89,7 @@ export default function DiagnosticAiCard(
               type="button"
               onClick={handleDownload}
               disabled={!result || downloading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black shadow-[0_12px_28px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition w-full sm:w-auto"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black shadow-[0_12px_28px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition shrink-0"
             >
               {downloading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

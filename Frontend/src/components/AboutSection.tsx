@@ -8,22 +8,23 @@ function AboutSection({ t }: AboutSectionProps): JSX.Element {
   return (
     <section
       id="about"
-      className="py-16"
+      className="py-24"
       style={{ scrollMarginTop: "5rem" }}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-[var(--text)] mb-3">
+        <div className="section-divider mb-16" />
+        <div className="text-center mb-14">
+          <h1 className="text-4xl md:text-5xl font-bold text-[var(--text)] mb-4">
             {t("about_title")}
           </h1>
-          <p className="text-[var(--muted)] max-w-3xl mx-auto">
+          <p className="text-[var(--muted)] text-lg max-w-3xl mx-auto">
             {t("about_subtitle")}
           </p>
         </div>
 
-        <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-6 py-10 text-center shadow-[0_18px_60px_rgba(0,0,0,0.18)] sm:px-10 sm:py-12">
+        <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] px-8 py-14 text-center shadow-[0_18px_60px_rgba(0,0,0,0.18)] sm:px-12 sm:py-16">
           <div className="absolute inset-0 opacity-35 [background-image:radial-gradient(circle_at_top,rgba(29,185,84,0.18),transparent_55%),radial-gradient(circle_at_bottom,rgba(181,140,255,0.18),transparent_60%)]" />
-          <div className="relative z-10 mx-auto max-w-3xl space-y-6">
+          <div className="relative z-10 mx-auto max-w-3xl space-y-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)]/80 px-4 py-2 text-[0.65rem] uppercase tracking-[0.4em] text-[var(--muted)]">
               <span className="h-2 w-2 rounded-full bg-[var(--accent)] shadow-[0_0_12px_var(--accent)]" />
               {t("home_hero_kicker")}

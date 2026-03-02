@@ -18,7 +18,7 @@ export interface SupportedLanguage {
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
   { value: "en", label: "EN", name: "English" },
-  { value: "ru", label: "RU", name: "???????" },
+  { value: "ru", label: "RU", name: "Русский" },
 ];
 
 export type TranslationKey = keyof typeof en;

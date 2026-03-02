@@ -10,7 +10,7 @@ services:
       PYTHONPATH: /app
       PORT: "5000"
       PDF_RENDERER: fpdf
-      GROQ_API_KEY: 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
+      GROQ_API_KEY: ${GROQ_API_KEY}
     env_file:
       - .env
     ports:
@@ -35,7 +35,7 @@ services:
       - backend
     environment:
       # adjust to your API host/port as needed
-      VITE_BACKEND_URL: http://localhost:5000
+      VITE_API_URL: http://localhost:5000
     ports:
       - "5173:5173"
     volumes:

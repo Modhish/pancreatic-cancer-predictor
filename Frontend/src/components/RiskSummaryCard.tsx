@@ -70,9 +70,9 @@ export default function RiskSummaryCard(
                   }}
                 />
               </div>
-              <div className="mt-1 flex justify-between text-[0.65rem] text-[var(--muted)]">
-                <span>{t("result_low")}</span>
-                <span>{t("result_high")}</span>
+              <div className="mt-1 flex justify-between gap-2 text-[0.65rem] text-[var(--muted)]">
+                <span className="truncate max-w-[40%]">{t("result_low")}</span>
+                <span className="truncate max-w-[58%] text-right">{t("result_high")}</span>
               </div>
             </div>
           </div>

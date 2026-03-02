@@ -44,21 +44,21 @@ export default function DiagnosticFormSection(
 
   return (
     <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 md:p-8 space-y-6 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h3 className="text-lg font-semibold text-[var(--text)] flex items-center gap-2">
-            <FileText className="h-5 w-5 text-[var(--accent)]" />
+            <FileText className="h-5 w-5 shrink-0 text-[var(--accent)]" />
             {t("diag_patient_values")}
           </h3>
-          <p className="mt-1 text-xs text-[var(--muted)]">{t("empty_prompt")}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("diag_subtitle")}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 text-xs text-[var(--muted)]">
-          <span className="inline-flex items-center gap-1">
-            <ShieldCheck className="h-4 w-4 text-[var(--accent)]" />
+        <div className="hidden sm:flex flex-col items-end gap-1 text-xs text-[var(--muted)] shrink-0">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--accent)]" />
             {t("footer_hipaa")}
           </span>
-          <span className="inline-flex items-center gap-1">
-            <Award className="h-4 w-4 text-[var(--accent-2)]" />
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <Award className="h-4 w-4 shrink-0 text-[var(--accent-2)]" />
             {t("footer_fda")}
           </span>
         </div>

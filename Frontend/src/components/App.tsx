@@ -37,6 +37,7 @@ export default function App(): JSX.Element {
   );
 
   const {
+    currentSection,
     setCurrentSection,
     form,
     result,
@@ -135,6 +136,8 @@ export default function App(): JSX.Element {
         lang={language}
       >
         <Navigation
+          currentSection={currentSection}
+          onNavigate={setCurrentSection}
           language={language}
           setLanguage={setLanguage}
           theme={theme}

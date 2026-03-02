@@ -1,0 +1,23 @@
+# Environment files (keep .env.example, ignore real .env at root if it holds secrets)
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/

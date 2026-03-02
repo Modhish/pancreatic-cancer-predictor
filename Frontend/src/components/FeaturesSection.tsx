@@ -54,15 +54,16 @@ function FeaturesSection({ t }: FeaturesSectionProps): JSX.Element {
   return (
     <section
       id="features"
-      className="py-16"
+      className="py-24"
       style={{ scrollMarginTop: "5rem" }}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-slate-900 mb-3">
+        <div className="section-divider mb-16" />
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-bold text-[var(--text)] mb-4">
             {t("features_title")}
           </h1>
-          <p className="text-slate-500 max-w-3xl mx-auto">
+          <p className="text-[var(--muted)] text-lg max-w-3xl mx-auto">
             {t("features_subtitle")}
           </p>
         </div>
@@ -71,17 +72,17 @@ function FeaturesSection({ t }: FeaturesSectionProps): JSX.Element {
           {features.map(({ icon: Icon, title, description, bg, iconColor }) => (
             <div
               key={title}
-              className="bg-white rounded-2xl shadow-md border border-slate-100 p-8 hover:shadow-lg transition"
+              className="feature-card"
             >
               <div
-                className={`flex items-center justify-center w-14 h-14 ${bg} rounded-xl mb-4`}
+                className={`flex items-center justify-center w-14 h-14 ${bg} rounded-xl mb-6`}
               >
                 <Icon className={`h-6 w-6 ${iconColor}`} />
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 mb-3">
+              <h3 className="text-xl font-semibold text-[var(--text)] mb-3">
                 {title}
               </h3>
-              <p className="text-slate-500">{description}</p>
+              <p className="text-[var(--muted)] leading-relaxed">{description}</p>
             </div>
           ))}
         </div>

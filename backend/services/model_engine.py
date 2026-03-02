@@ -67,12 +67,12 @@ class MedicalDiagnosticSystem:
         self.scaler = None
         self.shap_explainer = None
         self.model_metrics = {
-            "accuracy": 0.942,
-            "precision": 0.938,
-            "recall": 0.945,
-            "f1_score": 0.941,
-            "roc_auc": 0.962,
-            "specificity": 0.939,
+            "accuracy": 0.926,
+            "precision": 0.895,
+            "recall": 0.833,
+            "f1_score": 0.859,
+            "log_loss": 0.261,
+            "mcc": 0.725,
         }
         self.guideline_sources = GUIDELINE_SOURCES
         self.lab_thresholds = LAB_THRESHOLDS

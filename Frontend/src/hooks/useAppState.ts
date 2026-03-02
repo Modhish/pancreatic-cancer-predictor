@@ -40,20 +40,6 @@ const normalizeSectionFromPath = (pathname: string): SectionId => {
   return SECTION_SET.has(sanitized) ? (sanitized as SectionId) : DEFAULT_SECTION;
 };
 
-const scrollToSection = (
-  section: string,
-  behavior: ScrollBehavior = "smooth",
-) => {
-  if (typeof document === "undefined") {
-    return;
-  }
-  const target = document.getElementById(section);
-  if (!target) {
-    return;
-  }
-  target.scrollIntoView({ behavior, block: "start" });
-};
-
 type AiPayload = Partial<Record<string, unknown>> | null | undefined;
 
 type Base64Buffer = {
@@ -148,7 +134,7 @@ export interface UseAppState {
   currentSection: string;
   setCurrentSection: (section: string) => void;
   form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  setForm: FormState;
   result: AppResult | null;
   loading: boolean;
   downloading: boolean;
@@ -205,7 +191,6 @@ export default function useAppState(): UseAppState {
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
   const inFlightCommentaryKey = useRef<string | null>(null);
   const lastCompletedCommentaryKey = useRef<string | null>(null);
-  const lastPathnameRef = useRef<string | null>(null);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -221,33 +206,22 @@ export default function useAppState(): UseAppState {
         { replace: true },
       );
     }
-    if (lastPathnameRef.current !== location.pathname) {
-      lastPathnameRef.current = location.pathname;
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(() =>
-          scrollToSection(normalizedSection, "auto"),
-        );
-      } else {
-        scrollToSection(normalizedSection, "auto");
-      }
+    const el = document.getElementById(normalizedSection);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
     }
   }, [location.pathname, location.search, navigate]);
 
+  // One-way sync: language state → URL. Never reads searchParams to avoid
+  // the circular revert bug (old URL value overwriting freshly set language).
   useEffect(() => {
-    const langFromQuery = searchParams.get("lang");
-    if (langFromQuery) {
-      const normalized = langFromQuery.toLowerCase();
-      if (SUPPORTED_LANGUAGE_VALUES.has(normalized)) {
-        if (normalized !== language) {
-          setLanguageState(normalized);
-        }
-        return;
-      }
-    }
-    const params = new URLSearchParams(searchParams);
-    params.set("lang", language);
-    setSearchParams(params, { replace: true });
-  }, [language, searchParams, setSearchParams]);
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (params.get("lang") === language) return prev;
+      params.set("lang", language);
+      return params;
+    }, { replace: true });
+  }, [language, setSearchParams]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -270,18 +244,14 @@ export default function useAppState(): UseAppState {
       );
       const targetPath = canonicalSectionPath(normalized);
       if (location.pathname !== targetPath) {
-        lastPathnameRef.current = targetPath;
         navigate(
           { pathname: targetPath, search: location.search },
           { replace: false },
         );
       }
-      if (typeof window !== "undefined") {
-        window.requestAnimationFrame(() =>
-          scrollToSection(normalized, "smooth"),
-        );
-      } else {
-        scrollToSection(normalized, "smooth");
+      const el = document.getElementById(normalized);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
       }
     },
     [location.pathname, location.search, navigate],
@@ -293,29 +263,16 @@ export default function useAppState(): UseAppState {
       const normalized = SUPPORTED_LANGUAGE_VALUES.has(normalizedValue)
         ? normalizedValue
         : DEFAULT_LANGUAGE;
-      const params = new URLSearchParams(searchParams);
-      const paramValue = params.get("lang");
-      const isSameLanguage = normalized === language;
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem("language", normalized);
-      }
-
-      if (!isSameLanguage && typeof window !== "undefined") {
-        params.set("lang", normalized);
-        window.location.search = params.toString();
-        return;
-      }
-
       setLanguageState((prev) =>
         prev === normalized ? prev : normalized,
       );
-      if (paramValue !== normalized) {
+      const params = new URLSearchParams(searchParams);
+      if (params.get("lang") !== normalized) {
         params.set("lang", normalized);
         setSearchParams(params, { replace: true });
       }
     },
-    [language, searchParams, setSearchParams],
+    [searchParams, setSearchParams],
   );
 
   const handleChange = (
@@ -350,6 +307,7 @@ export default function useAppState(): UseAppState {
   const handleSubmit = async () => {
     setErr("");
     if (!validate.ok) {
+      setErr(validate.message);
       return;
     }
     setLoading(true);
