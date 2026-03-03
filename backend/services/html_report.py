@@ -321,6 +321,28 @@ def _load_font_face_css() -> str:
     return ""
 
 
+def _parse_commentary(raw: str) -> List[Dict[str, str]]:
+    """Parse AI commentary text into typed blocks for structured rendering.
+
+    Recognised types:
+      - "header"    – ALL-CAPS line (≤ 80 chars); used for section titles.
+      - "bullet"    – Line starting with "- " or "• "; rendered as a bullet point.
+      - "paragraph" – Everything else; rendered as a regular prose block.
+    """
+    result: List[Dict[str, str]] = []
+    for line in raw.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("- ") or line.startswith("• "):
+            result.append({"type": "bullet", "text": line[2:].strip()})
+        elif line.isupper() and len(line) <= 80:
+            result.append({"type": "header", "text": line})
+        else:
+            result.append({"type": "paragraph", "text": line})
+    return result
+
+
 def _normalize_risk(risk: Any, probability: float) -> str:
     raw = str(risk or "").lower()
     if "high" in raw:
@@ -418,7 +440,7 @@ def _build_context(
         or ""
     )
     commentary_raw = repair_text_encoding(commentary_source or "")
-    commentary = [p.strip() for p in commentary_raw.split("\n") if p.strip()]
+    commentary = _parse_commentary(commentary_raw)
 
     summary_template = copy["executive_summary"].get(risk_level, "")
     executive_summary = summary_template.format(
