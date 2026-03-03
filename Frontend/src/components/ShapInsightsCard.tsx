@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Activity, BarChart3, Brain } from "lucide-react";
-import useShapInsights from "./useShapInsights";
+import useShapInsights from "../hooks/useShapInsights";
 import { AppResult } from "../hooks/useAppState";
 import ShapBarPlot from "./ShapBarPlot";
 import ShapWaterfallPlot from "./ShapWaterfallPlot";

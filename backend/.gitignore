@@ -1,4 +1,9 @@
 venv/
+venv,/
+py/
+app.pycls/
+.venv/
+env/
 __pycache__/
 *.pyc
 .env

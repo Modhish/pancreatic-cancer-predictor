@@ -1,7 +1,7 @@
 import React from "react";
 import { ScatterChart } from "lucide-react";
 
-import { WaterfallData } from "./useShapInsights";
+import { WaterfallData } from "../hooks/useShapInsights";
 
 export interface ShapWaterfallPlotProps {
   shapWaterfall: WaterfallData;

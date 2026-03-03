@@ -1,5 +1,5 @@
 import React from "react";
-import { BeeswarmGroup } from "./useShapInsights";
+import { BeeswarmGroup } from "../hooks/useShapInsights";
 
 export interface ShapBeeswarmPlotProps {
   shapRange: number;

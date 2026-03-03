@@ -1,6 +1,6 @@
 import React from "react";
 
-import { ShapItem } from "./useShapInsights";
+import { ShapItem } from "../hooks/useShapInsights";
 
 export interface ShapBarPlotProps {
   shapSummary: ShapItem[];

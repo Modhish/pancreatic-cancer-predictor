@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { LineChart } from "lucide-react";
 
-import { ShapItem, WaterfallData } from "./useShapInsights";
+import { ShapItem, WaterfallData } from "../hooks/useShapInsights";
 
 export interface ShapLineChartProps {
   shapSummary: ShapItem[];
