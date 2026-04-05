@@ -7,6 +7,8 @@ import DiagnosticAiCard from "./DiagnosticAiCard";
 
 export interface DiagnosticFormSectionProps {
   form: FormState;
+  subjectName: string;
+  setSubjectName: (value: string) => void;
   result: AppResult | null;
   loading: boolean;
   downloading: boolean;
@@ -16,6 +18,8 @@ export interface DiagnosticFormSectionProps {
   t: (key: string) => string;
   clientType: string;
   setClientType: (type: string) => void;
+  audienceLocked: boolean;
+  availableAudiences: Array<{ id: string; labelKey: string }>;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleSubmit: () => Promise<void>;
   handleDownload: () => Promise<void>;
@@ -27,6 +31,8 @@ export default function DiagnosticFormSection(
 ): JSX.Element {
   const {
     form,
+    subjectName,
+    setSubjectName,
     result,
     loading,
     downloading,
@@ -36,6 +42,8 @@ export default function DiagnosticFormSection(
     t,
     clientType,
     setClientType,
+    audienceLocked,
+    availableAudiences,
     handleChange,
     handleSubmit,
     handleDownload,
@@ -86,6 +94,25 @@ export default function DiagnosticFormSection(
 
       <DiagnosticFormFields form={form} handleChange={handleChange} t={t} />
 
+      {(clientType === "doctor" || clientType === "researcher") && (
+        <label className="block">
+          <span className="mb-2 block text-sm font-semibold text-[var(--text)]">
+            {clientType === "doctor" ? "Patient name" : "Case label"}
+          </span>
+          <input
+            type="text"
+            value={subjectName}
+            onChange={(event) => setSubjectName(event.target.value)}
+            placeholder={
+              clientType === "doctor"
+                ? "Required for signed doctor analyses"
+                : "Optional label for this research case"
+            }
+            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--accent)]"
+          />
+        </label>
+      )}
+
       <DiagnosticFormActions
         loading={loading}
         handleSubmit={handleSubmit}
@@ -100,6 +127,8 @@ export default function DiagnosticFormSection(
         result={result}
         clientType={clientType}
         setClientType={setClientType}
+        audienceLocked={audienceLocked}
+        availableAudiences={availableAudiences}
         t={t}
       />
     </section>

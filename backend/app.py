@@ -13,7 +13,9 @@ import os
 
 from core.settings import app, logger
 from controllers import register_routes
+from services.database import init_db
 
+init_db()
 register_routes(app)
 
 # Configure template folder explicitly (ensures Jinja finds backend/templates)

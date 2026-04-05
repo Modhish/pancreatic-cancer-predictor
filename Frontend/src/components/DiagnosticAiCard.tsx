@@ -10,6 +10,8 @@ export interface DiagnosticAiCardProps {
   result: AppResult | null;
   clientType: string;
   setClientType: (type: string) => void;
+  audienceLocked: boolean;
+  availableAudiences: Array<{ id: string; labelKey: string }>;
   t: (key: string) => string;
 }
 
@@ -23,14 +25,12 @@ export default function DiagnosticAiCard(
     result,
     clientType,
     setClientType,
+    audienceLocked,
+    availableAudiences,
     t,
   } = props;
 
-  const audiences = [
-    { id: "patient", labelKey: "audience_patient" },
-    { id: "doctor", labelKey: "audience_doctor" },
-    { id: "scientist", labelKey: "audience_scientist" },
-  ] as const;
+  const audiences = availableAudiences;
   const activeIndex = Math.max(
     0,
     audiences.findIndex((aud) => aud.id === clientType),
@@ -51,45 +51,51 @@ export default function DiagnosticAiCard(
           </h3>
         </div>
         <div className="flex flex-col gap-3 w-full">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col gap-2 min-w-0 flex-1">
-              <span className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--muted)] font-semibold">
-                {t("audience")}
-              </span>
-              <div className="relative inline-flex w-full max-w-full rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] p-1.5 shadow-sm backdrop-blur">
-                <span
-                  className="absolute inset-y-1 rounded-xl bg-[var(--accent)] shadow-[0_12px_28px_rgba(29,185,84,0.25)] transition-all duration-300 ease-out"
-                  style={{
-                    left: `${(100 / audiences.length) * activeIndex}%`,
-                    width: `${100 / audiences.length}%`,
-                  }}
-                />
-                {audiences.map((audience) => {
-                  const active = clientType === audience.id;
-                  return (
-                    <button
-                      key={audience.id}
-                      type="button"
-                      onClick={() => setClientType(audience.id)}
-                      aria-pressed={active}
-                      className={`relative z-10 flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                        active
-                          ? "text-black"
-                          : "text-[var(--muted)] hover:text-[var(--text)]"
-                      }`}
-                    >
-                      {t(audience.labelKey)}
-                    </button>
-                  );
-                })}
-              </div>
+          <span className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--muted)] font-semibold">
+            {t("audience")}
+          </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              {audienceLocked ? (
+                <div className="inline-flex max-w-max rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] px-4 py-3 text-sm font-semibold text-[var(--text)] shadow-sm">
+                  {t(audiences[0]?.labelKey || "audience_patient")}
+                </div>
+              ) : (
+                <div className="relative inline-flex w-full max-w-full rounded-2xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_92%,transparent)] p-1.5 shadow-sm backdrop-blur">
+                  <span
+                    className="absolute inset-y-1 rounded-xl bg-[var(--accent)] shadow-[0_12px_28px_rgba(29,185,84,0.25)] transition-all duration-300 ease-out"
+                    style={{
+                      left: `${(100 / audiences.length) * activeIndex}%`,
+                      width: `${100 / audiences.length}%`,
+                    }}
+                  />
+                  {audiences.map((audience) => {
+                    const active = clientType === audience.id;
+                    return (
+                      <button
+                        key={audience.id}
+                        type="button"
+                        onClick={() => setClientType(audience.id)}
+                        aria-pressed={active}
+                        className={`relative z-10 flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                          active
+                            ? "text-black"
+                            : "text-[var(--muted)] hover:text-[var(--text)]"
+                        }`}
+                      >
+                        {t(audience.labelKey)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <button
               type="button"
               onClick={handleDownload}
               disabled={!result || downloading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black shadow-[0_12px_28px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition shrink-0"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-black shadow-[0_12px_28px_rgba(29,185,84,0.25)] hover:brightness-95 disabled:opacity-60 disabled:cursor-not-allowed transition shrink-0 sm:self-center"
             >
               {downloading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

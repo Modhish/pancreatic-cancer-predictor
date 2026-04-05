@@ -3,6 +3,8 @@ import i18n, { createTranslator, SUPPORTED_LANGUAGES } from "../translations";
 import { RANGES } from "../constants/ranges";
 import { fixMojibake } from "../utils/aiAnalysis";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { AuthUser } from "./useAuth";
+import { API_BASE, buildAuthHeaders } from "../utils/api";
 
 const DEFAULT_LANGUAGE = "en";
 
@@ -12,9 +14,16 @@ i18n.configure({
   defaultLocale: DEFAULT_LANGUAGE,
 });
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
-
-const SECTION_IDS = ["home", "about", "features", "diagnostic"] as const;
+const SECTION_IDS = [
+  "home",
+  "about",
+  "features",
+  "diagnostic",
+  "signin",
+  "signup",
+  "profile",
+  "dashboard",
+] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 const DEFAULT_SECTION: SectionId = "home";
 const SECTION_SET = new Set<string>(SECTION_IDS);
@@ -112,6 +121,10 @@ const defaultForm = {
 
 export type FormState = typeof defaultForm;
 export type FormKey = keyof FormState;
+const emptyForm = Object.keys(defaultForm).reduce(
+  (acc, key) => ({ ...acc, [key]: "" }),
+  {} as FormState,
+);
 
 export interface AppResult {
   probability?: number;
@@ -134,7 +147,9 @@ export interface UseAppState {
   currentSection: string;
   setCurrentSection: (section: string) => void;
   form: FormState;
-  setForm: FormState;
+  setForm: (next: FormState | ((prev: FormState) => FormState)) => void;
+  subjectName: string;
+  setSubjectName: (value: string) => void;
   result: AppResult | null;
   loading: boolean;
   downloading: boolean;
@@ -146,6 +161,8 @@ export interface UseAppState {
   language: string;
   setLanguage: (lang: string) => void;
   analysisRefreshing: boolean;
+  audienceLocked: boolean;
+  availableAudiences: Array<{ id: string; labelKey: string }>;
   t: (key: string) => string;
   validate: { ok: boolean; message: string };
   activeAiExplanation: string;
@@ -155,13 +172,36 @@ export interface UseAppState {
   handleClear: () => void;
 }
 
-export default function useAppState(): UseAppState {
+interface UseAppStateOptions {
+  authToken?: string;
+  currentUser?: AuthUser | null;
+}
+
+const normalizeAudienceRole = (value?: string | null): string => {
+  const normalized = String(value || "patient").toLowerCase();
+  if (normalized === "doctor" || normalized === "clinician" || normalized === "physician") {
+    return "doctor";
+  }
+  if (normalized === "researcher" || normalized === "scientist") {
+    return "researcher";
+  }
+  if (normalized === "admin") {
+    return "doctor";
+  }
+  return "patient";
+};
+
+export default function useAppState(
+  options: UseAppStateOptions = {},
+): UseAppState {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { authToken = "", currentUser = null } = options;
   const [currentSection, setCurrentSectionState] =
     useState<SectionId>(() => normalizeSectionFromPath(location.pathname));
   const [form, setForm] = useState<FormState>(defaultForm);
+  const [subjectName, setSubjectNameState] = useState("");
   const [result, setResult] = useState<AppResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -193,6 +233,41 @@ export default function useAppState(): UseAppState {
   const lastCompletedCommentaryKey = useRef<string | null>(null);
 
   const t = useMemo(() => createTranslator(language), [language]);
+  const effectiveClientType = useMemo(
+    () => normalizeAudienceRole(currentUser?.role || clientType),
+    [clientType, currentUser?.role],
+  );
+  const audienceLocked = Boolean(currentUser && currentUser.role !== "admin");
+  const availableAudiences = useMemo(
+    () =>
+      audienceLocked
+        ? [
+            {
+              id: effectiveClientType,
+              labelKey:
+                effectiveClientType === "researcher"
+                  ? "audience_scientist"
+                  : `audience_${effectiveClientType}`,
+            },
+          ]
+        : [
+            { id: "patient", labelKey: "audience_patient" },
+            { id: "doctor", labelKey: "audience_doctor" },
+            { id: "researcher", labelKey: "audience_scientist" },
+          ],
+    [audienceLocked, effectiveClientType],
+  );
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+    const nextAudience = normalizeAudienceRole(currentUser.role);
+    setClientType(nextAudience);
+    setSubjectNameState(
+      nextAudience === "patient" ? currentUser.full_name : "",
+    );
+  }, [currentUser?.full_name, currentUser?.id, currentUser?.role]);
 
   useEffect(() => {
     const normalizedSection = normalizeSectionFromPath(location.pathname);
@@ -275,6 +350,10 @@ export default function useAppState(): UseAppState {
     [searchParams, setSearchParams],
   );
 
+  const setSubjectName = useCallback((value: string) => {
+    setSubjectNameState(value);
+  }, []);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -306,6 +385,10 @@ export default function useAppState(): UseAppState {
 
   const handleSubmit = async () => {
     setErr("");
+    if (!authToken || !currentUser) {
+      setErr("Please sign in to run and save an analysis.");
+      return;
+    }
     if (!validate.ok) {
       setErr(validate.message);
       return;
@@ -314,11 +397,14 @@ export default function useAppState(): UseAppState {
     try {
       const res = await fetch(`${API_BASE}/api/predict`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(authToken, {
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify({
           ...form,
-          client_type: clientType,
+          client_type: effectiveClientType,
           language,
+          patient_name: subjectName,
         }),
       });
       if (!res.ok) {
@@ -340,10 +426,10 @@ export default function useAppState(): UseAppState {
       const variants =
         (data.audience_commentaries as Record<string, string> | undefined) ??
         {};
-      if (!variants[clientType]) {
-        variants[clientType] = aiExplanation;
+      if (!variants[effectiveClientType]) {
+        variants[effectiveClientType] = aiExplanation;
       }
-      const langKey = `${language}:${clientType}`;
+      const langKey = `${language}:${effectiveClientType}`;
       const perLang: Record<string, string> = { [langKey]: aiExplanation };
       for (const [aud, text] of Object.entries(variants)) {
         perLang[`${language}:${aud}`] = text;
@@ -351,10 +437,13 @@ export default function useAppState(): UseAppState {
       setResult({
         ...data,
         ai_explanation: aiExplanation,
-        client_type: clientType,
+        client_type: effectiveClientType,
         audience_commentaries: variants,
         audience_commentaries_by_lang: perLang,
       });
+      if (data.patient_name) {
+        setSubjectNameState(String(data.patient_name));
+      }
     } catch (e) {
       setErr(
         `Failed to reach the server. Make sure Flask is running on ${API_BASE} (error: ${e.message})`,
@@ -368,6 +457,10 @@ export default function useAppState(): UseAppState {
     if (!result) {
       return;
     }
+    if (!authToken) {
+      setErr("Please sign in to export reports.");
+      return;
+    }
 
     setDownloading(true);
     try {
@@ -379,7 +472,9 @@ export default function useAppState(): UseAppState {
 
       const response = await fetch(`${API_BASE}/api/report`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildAuthHeaders(authToken, {
+          "Content-Type": "application/json",
+        }),
         body: JSON.stringify({
           patient: patientPayload,
           result: {
@@ -426,46 +521,46 @@ export default function useAppState(): UseAppState {
   };
 
   const handleClear = () => {
-    setForm(
-      Object.keys(defaultForm).reduce(
-        (acc, k) => ({ ...acc, [k]: "" }),
-        {},
-      ),
-    );
+    setForm(emptyForm);
+    if (currentUser && normalizeAudienceRole(currentUser.role) === "patient") {
+      setSubjectNameState(currentUser.full_name);
+    } else {
+      setSubjectNameState("");
+    }
     setResult(null);
     setErr("");
   };
 
   const baseAiExplanation = getAiExplanationFromPayload(result);
   const activeAiExplanation =
-    result?.audience_commentaries_by_lang?.[`${language}:${clientType}`] ??
-    result?.audience_commentaries?.[clientType] ??
+    result?.audience_commentaries_by_lang?.[`${language}:${effectiveClientType}`] ??
+    result?.audience_commentaries?.[effectiveClientType] ??
     baseAiExplanation;
 
   useEffect(() => {
-    if (!result) {
+    if (!result || !authToken) {
       return;
     }
 
     const lang = String(language || "en").toLowerCase();
     const currentLang = String(result.language || "").toLowerCase();
-    const cachedLangKey = `${lang}:${clientType}`;
+    const cachedLangKey = `${lang}:${effectiveClientType}`;
     const cached =
       result.audience_commentaries_by_lang?.[cachedLangKey] ??
-      result.audience_commentaries?.[clientType];
+      result.audience_commentaries?.[effectiveClientType];
 
     if (
       cached &&
       currentLang === lang &&
       result.ai_explanation === cached &&
-      result.client_type === clientType
+      result.client_type === effectiveClientType
     ) {
       // We already have the right commentary; no fetch needed.
       setAnalysisRefreshing(false);
       return;
     }
 
-    const commentaryKey = `${lang}:${clientType}:${
+    const commentaryKey = `${lang}:${effectiveClientType}:${
       result.ai_explanation_b64 || result.ai_explanation || ""
     }:${result.probability ?? ""}:${result.prediction ?? ""}`;
 
@@ -484,13 +579,15 @@ export default function useAppState(): UseAppState {
       try {
         const response = await fetch(`${API_BASE}/api/commentary`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: buildAuthHeaders(authToken, {
+            "Content-Type": "application/json",
+          }),
           body: JSON.stringify({
             analysis: result,
             patient_values: result.patient_values,
             shap_values: result.shap_values || result.shapValues || [],
             language,
-            client_type: clientType,
+            client_type: effectiveClientType,
           }),
         });
         if (!response.ok) {
@@ -522,8 +619,8 @@ export default function useAppState(): UseAppState {
           };
           const mergedByLang: Record<string, string> = { ...previousByLang };
           if (newText) {
-            mergedMap[clientType] = newText;
-            mergedByLang[`${incomingLanguage}:${clientType}`] = newText;
+            mergedMap[effectiveClientType] = newText;
+            mergedByLang[`${incomingLanguage}:${effectiveClientType}`] = newText;
           }
           const audienceFromApi =
             (data.audience_commentaries as Record<string, string> | undefined) ?? {};
@@ -537,7 +634,7 @@ export default function useAppState(): UseAppState {
               data.ai_explanation_b64 ?? prev.ai_explanation_b64,
             audience_commentaries: mergedMap,
             audience_commentaries_by_lang: mergedByLang,
-            client_type: clientType,
+            client_type: effectiveClientType,
             language: incomingLanguage,
             risk_level: data.risk_level || prev.risk_level,
             prediction:
@@ -567,7 +664,7 @@ export default function useAppState(): UseAppState {
     return () => {
       cancelled = true;
     };
-  }, [language, clientType, result]);
+  }, [authToken, effectiveClientType, language, result]);
 
   return {
     // state
@@ -575,6 +672,8 @@ export default function useAppState(): UseAppState {
     setCurrentSection,
     form,
     setForm,
+    subjectName,
+    setSubjectName,
     result,
     loading,
     downloading,
@@ -586,6 +685,8 @@ export default function useAppState(): UseAppState {
     language,
     setLanguage,
     analysisRefreshing,
+    audienceLocked,
+    availableAudiences,
     // derived
     t,
     validate,

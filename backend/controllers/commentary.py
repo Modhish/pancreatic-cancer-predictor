@@ -7,7 +7,8 @@ from flask import current_app, jsonify, request
 
 from core.constants import rebuild_feature_vector
 from core.settings import logger, rate_limit
-from core.security import audit_event, current_role, get_request_id, require_role
+from core.security import audit_event, current_role, get_request_id
+from services.auth import get_authenticated_user, require_auth
 from services import diagnostic_system
 from utils.text import encode_text_base64, repair_text_encoding
 
@@ -16,10 +17,14 @@ from . import api_bp
 
 @api_bp.route("/commentary", methods=["POST"])
 @rate_limit("30/minute")
-@require_role(["clinician", "researcher", "admin"])
+@require_auth(["patient", "doctor", "researcher", "admin"])
 def regenerate_commentary():
     """Regenerate AI commentary in a requested language using existing context."""
     request_id = get_request_id()
+    user = get_authenticated_user()
+    if user is None:
+        return jsonify({"error": "authentication_required", "status": "unauthorized"}), 401
+
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         audit_event(
@@ -90,12 +95,7 @@ def regenerate_commentary():
             prediction = 1 if probability > 0.5 else 0
 
     language = str(merged.get("language") or payload.get("language") or "en").lower()
-    client_type = str(
-        merged.get("client_type")
-        or merged.get("clientType")
-        or payload.get("client_type")
-        or "patient"
-    ).lower()
+    client_type = str(user.get("role") or "patient").lower()
 
     try:
         commentary = diagnostic_system.generate_clinical_commentary(

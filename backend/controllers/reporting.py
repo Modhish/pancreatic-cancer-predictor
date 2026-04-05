@@ -7,7 +7,8 @@ from datetime import datetime
 from flask import current_app, jsonify, request, send_file
 
 from core.settings import logger, rate_limit
-from core.security import audit_event, current_role, get_request_id, require_role
+from core.security import audit_event, current_role, get_request_id
+from services.auth import require_auth
 from services import diagnostic_system
 from services import html_report
 
@@ -19,7 +20,7 @@ PDF_RATE_LIMIT = os.getenv("PDF_RATE_LIMIT", "60/minute")
 
 @api_bp.route("/report", methods=["POST"])
 @rate_limit(PDF_RATE_LIMIT)
-@require_role(["clinician", "researcher", "admin"])
+@require_auth(["patient", "doctor", "researcher", "admin"])
 def download_report():
     """Generate a PDF report that summarizes the diagnostic results."""
     request_id = get_request_id()

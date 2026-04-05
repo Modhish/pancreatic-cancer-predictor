@@ -6,6 +6,8 @@ import DiagnosticResultsSection from "./DiagnosticResultsSection";
 
 export interface DiagnosticToolProps {
   form: FormState;
+  subjectName: string;
+  setSubjectName: (value: string) => void;
   result: AppResult | null;
   loading: boolean;
   downloading: boolean;
@@ -19,6 +21,8 @@ export interface DiagnosticToolProps {
   setClientType: (type: string) => void;
   analysisRefreshing: boolean;
   aiExplanation: string;
+  audienceLocked: boolean;
+  availableAudiences: Array<{ id: string; labelKey: string }>;
   t: (key: string) => string;
 }
 
@@ -27,6 +31,8 @@ export default function DiagnosticTool(
 ): JSX.Element {
   const {
     form,
+    subjectName,
+    setSubjectName,
     result,
     loading,
     downloading,
@@ -40,6 +46,8 @@ export default function DiagnosticTool(
     setClientType,
     analysisRefreshing,
     aiExplanation,
+    audienceLocked,
+    availableAudiences,
     t,
   } = props;
 
@@ -57,6 +65,8 @@ export default function DiagnosticTool(
             <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-start">
               <DiagnosticFormSection
                 form={form}
+                subjectName={subjectName}
+                setSubjectName={setSubjectName}
                 result={result}
                 loading={loading}
                 downloading={downloading}
@@ -66,6 +76,8 @@ export default function DiagnosticTool(
                 t={t}
                 clientType={clientType}
                 setClientType={setClientType}
+                audienceLocked={audienceLocked}
+                availableAudiences={availableAudiences}
                 handleChange={handleChange}
                 handleSubmit={handleSubmit}
                 handleDownload={handleDownload}

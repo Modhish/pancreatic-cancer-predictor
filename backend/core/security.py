@@ -83,6 +83,9 @@ def get_request_id() -> str:
 
 def current_role() -> str:
     """Resolve the current role (best effort) for audit and RBAC checks."""
+    current_user = getattr(g, "current_user", None)
+    if isinstance(current_user, dict) and current_user.get("role"):
+        return str(current_user["role"])
     role = getattr(g, "rbac_role", None)
     if role:
         return str(role)
