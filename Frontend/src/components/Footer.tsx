@@ -9,7 +9,7 @@ export interface FooterProps {
 function Footer({ onNavigate, t }: FooterProps): JSX.Element {
   return (
     <footer className="relative overflow-hidden border-t border-[var(--border)] py-16 text-[var(--text)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1680px] px-4 sm:px-8 lg:px-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           {/* Brand */}
           <div className="space-y-4">
@@ -19,12 +19,12 @@ function Footer({ onNavigate, t }: FooterProps): JSX.Element {
               </div>
               <div>
                 <h3 className="text-lg font-bold leading-tight">DiagnoAI</h3>
-                <p className="text-xs text-[var(--muted)]">Pancreas Diagnostic</p>
+                <p className="text-xs text-[var(--muted)]">Pancreas Risk Assessment</p>
               </div>
             </div>
             <p className="text-sm text-[var(--muted)] leading-relaxed">
-              Advanced AI-powered pancreatic cancer diagnostic system for
-              healthcare professionals and researchers.
+              Research prototype for pancreatic cancer risk assessment from
+              CBC/ESR indicators.
             </p>
           </div>
 

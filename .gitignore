@@ -26,6 +26,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Codex local workspace artifacts
+.codex/
+.codex-run/
+
 # Logs
 *.log
 logs/

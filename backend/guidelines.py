@@ -1,5 +1,5 @@
 """
-Structured guideline data for pancreatic cancer diagnostics.
+Structured guideline metadata used to contextualize pancreatic risk assessment output.
 
 Compiled from:
 - National Comprehensive Cancer Network (NCCN) Clinical Practice Guidelines in Oncology: Pancreatic Adenocarcinoma, Version 2.2024.
@@ -46,84 +46,56 @@ GUIDELINE_SOURCES = {
 
 
 LAB_THRESHOLDS = {
-    # Laboratory markers with normal ranges, alert thresholds, and associated actions
-    "bilirubin": {
-        "unit": "µmol/L",
-        "normal_range": (5, 21),
+    # CBC/ESR markers aligned with the current 18-feature model schema.
+    "esr": {
+        "unit": "mm/h",
+        "normal_range": (0, 20),
         "thresholds": [
             {
-                "level": "monitor",
-                "operator": ">",
-                "value": 15,
-                "action": "Repeat labs; assess for biliary obstruction or hemolysis within 1 week.",
-                "source": "NCCN_2024",
-            },
-            {
-                "level": "urgent_evaluation",
+                "level": "review",
                 "operator": ">",
                 "value": 20,
-                "action": "Order pancreas-protocol CT or MRI; expedite hepatobiliary referral.",
-                "source": "NCCN_2024",
-            },
-            {
-                "level": "emergent",
-                "operator": ">",
-                "value": 50,
-                "action": "Immediate hospital evaluation for biliary decompression.",
+                "action": "Review inflammation, infection, anemia, and other non-specific causes with a clinician.",
                 "source": "ESMO_2023",
-            },
+            }
         ],
     },
-    "glucose": {
-        "unit": "mmol/L",
-        "normal_range": (3.9, 5.6),
+    "wbc": {
+        "unit": "10^9/L",
+        "normal_range": (4.0, 11.0),
         "thresholds": [
             {
-                "level": "monitor",
-                "operator": ">=",
-                "value": 6.1,
-                "action": "Screen for impaired fasting glucose; consider HbA1c and endocrine consult.",
-                "source": "ASCO_2023",
-            },
-            {
-                "level": "high_risk",
-                "operator": ">=",
-                "value": 6.5,
-                "action": "Flag new-onset diabetes in adults over 50; recommend imaging per NCCN high-risk algorithm.",
+                "level": "review",
+                "operator": ">",
+                "value": 11.0,
+                "action": "Repeat or contextualize with symptoms and differential count.",
                 "source": "NCCN_2024",
-            },
+            }
         ],
     },
-    "ca19_9": {
-        "unit": "U/mL",
-        "normal_range": (0, 37),
+    "plt": {
+        "unit": "10^9/L",
+        "normal_range": (150, 450),
         "thresholds": [
             {
-                "level": "monitor",
+                "level": "review",
                 "operator": ">",
-                "value": 37,
-                "action": "Repeat after correcting for cholestasis; evaluate trends.",
+                "value": 450,
+                "action": "Discuss reactive and hematologic causes before interpreting as a risk signal.",
                 "source": "ASCO_2023",
-            },
-            {
-                "level": "high_suspicion",
-                "operator": ">",
-                "value": 300,
-                "action": "High suspicion for malignancy; urgent cross-sectional imaging and oncology referral.",
-                "source": "NCCN_2024",
-            },
+            }
         ],
     },
-    "act": {
-        "unit": "seconds",
-        "normal_range": (10, 40),
+    "hgb": {
+        "unit": "g/L",
+        "normal_range": (120, 170),
         "thresholds": [
             {
-                "level": "monitor",
-                "operator": ">",
-                "value": 35,
-                "action": "Assess for coagulopathy; prepare for invasive procedures accordingly.",
-                "source": "ASCO_2023",
+                "level": "review",
+                "operator": "<",
+                "value": 120,
+                "action": "Review anemia context, prior results, and need for follow-up testing with a clinician.",
+                "source": "ESMO_2023",
             }
         ],
     },
@@ -132,9 +104,9 @@ LAB_THRESHOLDS = {
 
 IMAGING_PATHWAYS = [
     {
-        "trigger": "Obstructive jaundice or bilirubin > 20 µmol/L",
-        "recommended_modality": "CT abdomen/pelvis with pancreas protocol. Consider MRI/MRCP if CT contraindicated.",
-        "next_steps": "EUS with FNA if imaging detects mass or ductal dilation.",
+        "trigger": "High model-estimated risk plus concerning clinical context",
+        "recommended_modality": "Clinician-selected imaging pathway, such as CT or MRI, when medically indicated.",
+        "next_steps": "Specialist review if imaging or symptoms raise concern.",
         "source": "NCCN_2024",
     },
     {
@@ -216,4 +188,3 @@ def list_high_risk_criteria() -> list[dict]:
 def list_follow_up_windows() -> list[dict]:
     """Return follow-up recommendations mapped to risk tiers."""
     return FOLLOW_UP_WINDOWS
-

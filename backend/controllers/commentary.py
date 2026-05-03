@@ -46,6 +46,25 @@ def regenerate_commentary():
     shap_values = merged.get("shap_values") or merged.get("shapValues") or []
     if not isinstance(shap_values, list):
         shap_values = []
+    if "prediction" not in merged or "probability" not in merged or not shap_values:
+        audit_event(
+            "commentary",
+            current_role(),
+            status="validation_error",
+            detail="missing_model_context",
+            http_status=400,
+            request_id=request_id,
+        )
+        return (
+            jsonify(
+                {
+                    "error": "Model result context is required to regenerate commentary",
+                    "status": "validation_error",
+                    "details": "Send prediction, probability, and shap_values from a completed risk assessment.",
+                }
+            ),
+            400,
+        )
 
     patient_values = merged.get("patient_values") or merged.get("patientValues")
     if patient_values is None and isinstance(merged.get("patient"), dict):
@@ -120,6 +139,17 @@ def regenerate_commentary():
             )
         except Exception:
             audience_commentaries = {client_type: commentary}
+        try:
+            shap_chart_explanations = diagnostic_system.generate_shap_chart_explanations(
+                prediction,
+                probability,
+                shap_values,
+                features,
+                language=language,
+                client_type=client_type,
+            )
+        except Exception:
+            shap_chart_explanations = {}
         risk_level = "High" if probability > 0.7 else "Moderate" if probability > 0.3 else "Low"
         audit_event(
             "commentary",
@@ -143,6 +173,7 @@ def regenerate_commentary():
                 "prediction": int(prediction),
                 "probability": float(probability),
                 "audience_commentaries": audience_commentaries,
+                "shap_chart_explanations": shap_chart_explanations,
             }
         )
     except Exception as exc:  # pragma: no cover

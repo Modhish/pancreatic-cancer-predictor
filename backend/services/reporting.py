@@ -7,7 +7,7 @@ from typing import Any, Dict, Tuple
 
 from fpdf import FPDF
 
-from core.constants import FEATURE_LABELS
+from core.constants import FEATURE_DEFAULTS, FEATURE_LABELS
 from utils.text import repair_text_encoding
 
 
@@ -35,17 +35,17 @@ GUIDELINE_LINKS = [
 
 COPY = {
     "en": {
-        "title": "DiagnoAI Pancreas | Clinical Report",
+        "title": "DiagnoAI Pancreas | Risk Assessment Report",
         "generated_on": "Generated on",
         "risk_label": "Risk level",
         "probability_label": "Risk probability",
         "audience_label": "Audience",
         "language_label": "Language",
         "risk_names": {"High": "HIGH RISK", "Moderate": "MODERATE RISK", "Low": "LOW RISK"},
-        "overview_title": "Clinical overview",
+        "overview_title": "Risk assessment overview",
         "overview": {
-            "High": "High-risk pattern detected. Confirm within 7 days (contrast CT/MRI, EUS-FNA if needed) and manage pain/obstruction in parallel.",
-            "Moderate": "Intermediate probability. Clarify in 2–4 weeks with pancreatic protocol imaging, tumor markers, and symptom-guided follow-up.",
+            "High": "High-risk pattern estimated. Discuss prompt clinical review and appropriate confirmatory workup with the treating team.",
+            "Moderate": "Intermediate probability. Discuss targeted follow-up, repeat labs, and possible imaging with the treating team.",
             "Low": "Low risk estimate. Maintain surveillance, reinforce prevention, and define clear triggers for earlier reassessment.",
         },
         "labs_title": "Laboratory snapshot",
@@ -57,15 +57,15 @@ COPY = {
             "negative": "reduces risk pressure",
             "neutral": "neutral influence",
         },
-        "commentary_title": "AI clinical commentary",
+        "commentary_title": "AI risk commentary",
         "commentary_empty": "AI commentary is not available for this audience.",
         "actions_title": "Priority next steps",
         "actions": {
             "High": [
-                "Order contrast-enhanced CT or MRI within 7 days; add EUS-FNA if imaging is equivocal.",
-                "Trend tumor markers (CA 19-9, CEA) plus metabolic/coagulation panels.",
-                "Manage pain, nutrition, and biliary obstruction in parallel to diagnostics.",
-                "Engage hepatobiliary surgery and oncology early for joint planning.",
+                "Discuss whether contrast-enhanced CT/MRI or EUS-FNA is clinically appropriate.",
+                "Discuss whether additional markers such as CA 19-9 or CEA are needed.",
+                "Review symptoms and urgent warning signs with the treating team.",
+                "Consider specialist referral if the full clinical context supports it.",
             ],
             "Moderate": [
                 "Schedule pancreatic protocol CT or MRI in 2–4 weeks based on symptoms.",
@@ -90,17 +90,17 @@ COPY = {
         "language_names": {"en": "English", "ru": "Russian"},
     },
     "ru": {
-        "title": "DiagnoAI Pancreas | Клинический отчёт",
+        "title": "DiagnoAI Pancreas | Отчёт об оценке риска",
         "generated_on": "Дата формирования",
         "risk_label": "Уровень риска",
         "probability_label": "Вероятность риска",
         "audience_label": "Целевая аудитория",
         "language_label": "Язык",
         "risk_names": {"High": "ВЫСОКИЙ РИСК", "Moderate": "СРЕДНИЙ РИСК", "Low": "НИЗКИЙ РИСК"},
-        "overview_title": "Клиническое резюме",
+        "overview_title": "Резюме оценки риска",
         "overview": {
-            "High": "Обнаружен высокий риск. Подтвердите диагноз в течение 7 дней: контрастная КТ/МРТ, EUS-FNA при неопределённом изображении, параллельно контролируйте желчную обструкцию и боль.",
-            "Moderate": "Умеренная вероятность. Уточните в ближайшие 2–4 недели с помощью КТ/МРТ по протоколу поджелудочной, онкомаркеров и симптом-ориентированного наблюдения.",
+            "High": "Модель оценила высокий риск. Обсудите с лечащей командой срочный клинический пересмотр и подходящие подтверждающие обследования.",
+            "Moderate": "Умеренная вероятность. Обсудите с лечащей командой целевое наблюдение, повторные анализы и необходимость визуализации.",
             "Low": "Низкая оценка риска. Поддерживайте наблюдение, усиливайте профилактику и заранее определите признаки для более раннего пересмотра.",
         },
         "labs_title": "Лабораторный срез",
@@ -112,15 +112,15 @@ COPY = {
             "negative": "снижает риск",
             "neutral": "нейтрально",
         },
-        "commentary_title": "Клинический комментарий ИИ",
+        "commentary_title": "Пояснение ИИ к оценке риска",
         "commentary_empty": "Комментарий недоступен для выбранной аудитории.",
         "actions_title": "Приоритетные шаги",
         "actions": {
             "High": [
-                "Провести контрастную КТ или МРТ в течение 7 дней; при неопределённости — EUS-FNA.",
-                "Отслеживать онкомаркеры (CA 19-9, CEA) и ключевые метаболические показатели.",
-                "Параллельно вести обезболивание, питание и коррекцию желчной обструкции.",
-                "Подключить хирурга-гепатобилиара, онколога и генетика для совместного плана.",
+                "Обсудить, нужны ли КТ/МРТ с контрастом или EUS-FNA с учетом полной клинической картины.",
+                "Обсудить, нужны ли дополнительные маркеры, например CA 19-9 или CEA.",
+                "Разобрать симптомы и признаки, требующие срочного обращения.",
+                "Рассмотреть направление к профильному специалисту, если это подтверждается клиническим контекстом.",
             ],
             "Moderate": [
                 "Запланировать КТ/МРТ по протоколу поджелудочной в течение 2–4 недель по тяжести симптомов.",
@@ -271,21 +271,7 @@ def generate_pdf_report(self, patient_inputs: Dict[str, Any], analysis: Dict[str
     pdf.set_font(font_family, "", 10.5)
     pdf.set_text_color(*PALETTE["neutral"])
 
-    feature_order = [
-        "wbc",
-        "rbc",
-        "plt",
-        "hgb",
-        "hct",
-        "mpv",
-        "pdw",
-        "mono",
-        "baso_abs",
-        "baso_pct",
-        "glucose",
-        "act",
-        "bilirubin",
-    ]
+    feature_order = [key for key, _ in FEATURE_DEFAULTS]
     label_map = FEATURE_LABELS.get(locale, FEATURE_LABELS["en"])
     rows: list[tuple[str, str]] = []
     for key in feature_order:

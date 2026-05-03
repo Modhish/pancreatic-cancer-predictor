@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { AppResult } from "../hooks/useAppState";
+import { normalizeFeatureKey } from "../utils/featureLabels";
 
 export interface ShapItem {
   feature: string;
+  featureKey?: string | null;
   value: number;
   importance: number;
   impact: "positive" | "negative";
@@ -37,6 +39,7 @@ export interface ShapMetaSummary {
 
 export interface BeeswarmGroup {
   feature: string;
+  featureKey?: string | null;
   points: NormalizedShapEntry[];
   meanAbs: number;
 }
@@ -63,15 +66,19 @@ const normalizeEntries = (
         item.name ||
         item[0] ||
         `Feature ${idx + 1}`;
+      const featureKey = normalizeFeatureKey(String(feature));
       const value = Number(
         item.value ?? item.impact ?? item.shap ?? item[1] ?? 0,
       );
       const featureValue =
-        typeof result?.patient_values?.[feature] === "number"
-          ? Number(result.patient_values[feature])
-          : null;
+        featureKey && typeof result?.patient_values?.[featureKey] === "number"
+          ? Number(result.patient_values[featureKey])
+          : typeof result?.patient_values?.[feature] === "number"
+            ? Number(result.patient_values[feature])
+            : null;
       const normalized: NormalizedShapEntry = {
         feature,
+        featureKey,
         value,
         importance: Math.abs(Number(item.importance ?? value)),
         impact: item.impact || (value >= 0 ? "positive" : "negative"),
@@ -88,18 +95,20 @@ const createBeeswarmGroups = (
 ): BeeswarmGroup[] => {
   const map = new Map<string, NormalizedShapEntry[]>();
   entries.forEach((entry) => {
-    const list = map.get(entry.feature) ?? [];
+    const key = entry.featureKey || entry.feature;
+    const list = map.get(key) ?? [];
     list.push(entry);
-    map.set(entry.feature, list);
+    map.set(key, list);
   });
   return Array.from(map.entries())
-    .map(([feature, points]) => {
+    .map(([key, points]) => {
       const sorted = points.sort((a, b) => b.value - a.value);
       const meanAbs =
         sorted.reduce((sum, point) => sum + Math.abs(point.value), 0) /
         Math.max(1, sorted.length);
       return {
-        feature,
+        feature: sorted[0]?.feature || key,
+        featureKey: sorted[0]?.featureKey || null,
         points: sorted,
         meanAbs,
       };
@@ -115,8 +124,7 @@ export default function useShapInsights(
   const shapSummary: ShapItem[] = useMemo(() => {
     if (!allEntries.length) return [];
     return [...allEntries]
-      .sort((a, b) => b.importance - a.importance)
-      .slice(0, 8);
+      .sort((a, b) => b.importance - a.importance);
   }, [allEntries]);
 
   const shapBaseline = useMemo(() => {

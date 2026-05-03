@@ -1,4 +1,4 @@
-"""Service layer modules such as the diagnostic system."""
+"""Service layer modules for risk assessment, commentary, and reporting."""
 
 from .diagnostic_system import (
     diagnostic_system,

@@ -1,5 +1,26 @@
 import json
 
+SAMPLE_PATIENT = {
+    "wbc": 5.8,
+    "rbc": 4.5,
+    "plt": 220.0,
+    "hgb": 135.0,
+    "hct": 42.0,
+    "mpv": 9.5,
+    "pdw": 16.0,
+    "neut_abs": 3.5,
+    "neut_pct": 60.0,
+    "lymph_abs": 2.0,
+    "lymph_pct": 30.0,
+    "mono_abs": 0.5,
+    "mono_pct": 6.0,
+    "eos_abs": 0.2,
+    "eos_pct": 2.0,
+    "baso_abs": 0.03,
+    "baso_pct": 0.5,
+    "esr": 12.0,
+}
+
 
 def test_health(client):
     r = client.get("/api/health")
@@ -29,58 +50,34 @@ def test_model_info(client):
     assert isinstance(data.get("metrics"), dict)
 
 
-def test_predict_happy_path(client):
+def test_predict_happy_path(client, auth_headers):
     payload = {
-        "wbc": 5.8,
-        "rbc": 4.0,
-        "plt": 184.0,
-        "hgb": 127.0,
-        "hct": 40.0,
-        "mpv": 9.5,
-        "pdw": 14.0,
-        "mono": 0.5,
-        "baso_abs": 0.03,
-        "baso_pct": 0.8,
-        "glucose": 5.2,
-        "act": 28.0,
-        "bilirubin": 12.0,
+        **SAMPLE_PATIENT,
         "language": "en",
         "client_type": "patient",
     }
-    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json")
+    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json", headers=auth_headers)
     assert r.status_code == 200
     data = r.get_json()
     for key in ("prediction", "probability", "shap_values", "risk_level", "processing_time"):
         assert key in data
 
 
-def test_predict_validation_error(client):
+def test_predict_validation_error(client, auth_headers):
     payload = {"wbc": "not-a-number"}
-    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json")
+    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json", headers=auth_headers)
     assert r.status_code == 400
     data = r.get_json()
     assert data["status"] == "validation_error"
 
 
-def test_commentary_and_report(client):
+def test_commentary_and_report(client, auth_headers):
     payload = {
-        "wbc": 5.8,
-        "rbc": 4.0,
-        "plt": 184.0,
-        "hgb": 127.0,
-        "hct": 40.0,
-        "mpv": 9.5,
-        "pdw": 14.0,
-        "mono": 0.5,
-        "baso_abs": 0.03,
-        "baso_pct": 0.8,
-        "glucose": 5.2,
-        "act": 28.0,
-        "bilirubin": 12.0,
+        **SAMPLE_PATIENT,
         "language": "en",
         "client_type": "patient",
     }
-    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json")
+    r = client.post("/api/predict", data=json.dumps(payload), content_type="application/json", headers=auth_headers)
     assert r.status_code == 200
     result = r.get_json()
 
@@ -96,6 +93,7 @@ def test_commentary_and_report(client):
             }
         ),
         content_type="application/json",
+        headers=auth_headers,
     )
     assert r2.status_code == 200
     data2 = r2.get_json()
@@ -111,15 +109,28 @@ def test_commentary_and_report(client):
             }
         ),
         content_type="application/json",
+        headers=auth_headers,
     )
     assert r3.status_code == 200
     assert r3.headers.get("Content-Type", "").startswith("application/pdf")
 
 
-def test_report_handles_object_shap(client):
+def test_commentary_requires_existing_model_context(client, auth_headers):
+    resp = client.post(
+        "/api/commentary",
+        data=json.dumps({"patient_values": SAMPLE_PATIENT, "language": "ru"}),
+        content_type="application/json",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data["status"] == "validation_error"
+
+
+def test_report_handles_object_shap(client, auth_headers):
     """Ensure shap_values supplied as an object does not break PDF generation."""
     payload = {
-        "patient": {"wbc": 5.8, "rbc": 4.0},
+        "patient": SAMPLE_PATIENT,
         "analysis": {
             "probability": 0.4,
             "risk_level": "Moderate",
@@ -127,6 +138,6 @@ def test_report_handles_object_shap(client):
             "shap_values": {"feature": "wbc", "value": 0.12, "impact": "positive"},
         },
     }
-    resp = client.post("/api/report", data=json.dumps(payload), content_type="application/json")
+    resp = client.post("/api/report", data=json.dumps(payload), content_type="application/json", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.headers.get("Content-Type", "").startswith("application/pdf")

@@ -108,7 +108,7 @@ export default function ResearchDashboardPage({
   );
 
   return (
-    <section id="dashboard" className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-8 lg:px-12">
+    <section id="dashboard" className="mx-auto w-full max-w-[1680px] px-4 py-12 sm:px-8 lg:px-12">
       <div className="space-y-6">
         <div className="card-sleek rounded-[2rem] p-8 sm:p-10">
           <p className="text-sm uppercase tracking-[0.28em] text-[var(--muted)]">

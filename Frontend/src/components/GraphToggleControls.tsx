@@ -18,11 +18,11 @@ export interface GraphToggleControlsProps {
 export default function GraphToggleControls(
   props: GraphToggleControlsProps,
 ): JSX.Element {
-  const { controls, visibility, onToggle } = props;
+  const { controls, visibility, onToggle, t } = props;
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-[0.75rem]">
-      <span className="text-[var(--muted)]">Graphs:</span>
+      <span className="text-[var(--muted)]">{t("graph_controls_label")}:</span>
       {controls.map(({ key, label, icon: Icon }) => (
         <button
           key={key}

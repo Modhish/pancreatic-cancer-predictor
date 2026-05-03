@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import json
+import re
 from typing import Any, Dict, List
 
 from core.constants import (
     COMMENTARY_LOCALE,
+    FEATURE_DEFAULTS,
     FEATURE_LABELS,
     RU_FEATURE_LABELS,
 )
@@ -23,6 +26,33 @@ PROFESSIONAL_AUDIENCES = {
     "physician",
 }
 SCIENTIST_AUDIENCES = {"scientist", "scientists", "researcher", "researchers"}
+
+UNSAFE_CLAIM_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\byou have pancreatic cancer\b",
+        r"\bpatient has pancreatic cancer\b",
+        r"\bconfirmed pancreatic cancer\b",
+        r"\bdiagnosis\s*:\s*pancreatic cancer\b",
+        r"\bdefinitive diagnosis of pancreatic cancer\b",
+        r"\bfinal diagnosis\s*:\s*pancreatic cancer\b",
+        r"\bstart chemotherapy\b",
+        r"\bbegin chemotherapy\b",
+        r"\bprescribe\b",
+        r"у\s+вас\s+рак\s+поджелудочной",
+        r"пациент\s+имеет\s+рак\s+поджелудочной",
+        r"подтвержден[а-я]*\s+рак\s+поджелудочной",
+        r"диагноз\s*:\s*рак\s+поджелудочной",
+        r"окончательный\s+диагноз\s*:\s*рак",
+        r"начать\s+химиотерапию",
+        r"назначить\s+химиотерапию",
+    )
+]
+
+
+def _contains_unsafe_claim(text: str) -> bool:
+    """Detect LLM claims that turn risk assessment into diagnosis or treatment orders."""
+    return any(pattern.search(text or "") for pattern in UNSAFE_CLAIM_PATTERNS)
 
 
 def _normalize_language(language: str | None) -> str:
@@ -159,13 +189,14 @@ def generate_clinical_commentary(
             f"- {sv.get('feature', 'Unknown')}: {sv.get('value', 0.0)} ({sv.get('impact', 'neutral')} impact)"
             for sv in shap_values[:5]
         )
-        wbc = _safe_patient_value(0, 5.8)
-        plt = _safe_patient_value(2, 184.0)
-        bilirubin = _safe_patient_value(12, 17.0)
-        glucose = _safe_patient_value(10, 6.3)
+        selected_lab_lines = "\n".join(
+            f"- {feature.upper()}: {_safe_patient_value(idx, default):.2f}"
+            for idx, (feature, default) in enumerate(FEATURE_DEFAULTS)
+        )
 
         prompt = f"""
-You are a medical AI assistant analyzing a pancreatic cancer risk assessment.
+You are a medical AI assistant explaining a pancreatic cancer screening/risk-support assessment.
+This is a bachelor research prototype and decision-support aid, not a diagnostic medical device.
 
 MODEL PREDICTION: {'High Risk - Additional Evaluation Required' if prediction == 1 else 'Low Risk Screen'}
 RISK PROBABILITY: {probability:.1%}
@@ -177,15 +208,14 @@ TOP CONTRIBUTORS: {', '.join(top_factors) or 'None supplied'}
 TOP CONTRIBUTING FACTORS:
 {top_factor_lines or 'No SHAP factors available'}
 
-PATIENT LAB VALUES:
-- WBC: {wbc:.2f}
-- PLT: {plt:.2f}
-- Bilirubin: {bilirubin:.2f}
-- Glucose: {glucose:.2f}
+SELECTED CBC/ESR LAB VALUES:
+{selected_lab_lines}
 
 {response_structure}
 
-Be accurate, align with audience expectations, state that this is a screening aid, and provide clear follow-up guidance.
+Be accurate, align with audience expectations, state that this is a screening/risk-support aid, and provide clear follow-up guidance.
+You cannot override, reinterpret, or replace the model prediction, probability, or SHAP factors.
+Do not say the patient has cancer, do not write "diagnosis: cancer", and do not order treatment such as chemotherapy.
 {audience_instruction}
 {scientist_instruction}
 {language_instruction}
@@ -201,6 +231,8 @@ End with a concise reminder that definitive care decisions rest with the treatin
             )
             ai_text = response.choices[0].message.content or ""
             ai_text = repair_text_encoding(ai_text)
+            if _contains_unsafe_claim(ai_text):
+                raise ValueError("LLM output contained unsafe diagnostic or treatment wording")
             if locale_code == "ru" and not is_readable_russian(ai_text):
                 raise ValueError("LLM output unreadable in requested language")
             return ai_text
@@ -361,6 +393,145 @@ def _generate_ru_commentary(
     )
 
 
+def _format_chart_driver_summary(shap_values: List[Dict[str, Any]], limit: int = 5) -> str:
+    rows: List[str] = []
+    sorted_values = sorted(
+        shap_values,
+        key=lambda item: abs(float(item.get("value") or item.get("importance") or 0)),
+        reverse=True,
+    )
+    for item in sorted_values[:limit]:
+        feature = str(item.get("feature") or "Feature")
+        try:
+            value = float(item.get("value", 0.0))
+            value_text = f"{value:+.3f}"
+        except (TypeError, ValueError):
+            value_text = str(item.get("value") or "N/A")
+        rows.append(f"{feature}: {value_text}")
+    return "; ".join(rows)
+
+
+def _fallback_shap_chart_explanations(
+    probability: float,
+    shap_values: List[Dict[str, Any]],
+    language: str,
+) -> Dict[str, str]:
+    top = sorted(
+        shap_values,
+        key=lambda item: abs(float(item.get("value") or item.get("importance") or 0)),
+        reverse=True,
+    )
+    first = str(top[0].get("feature", "the strongest feature")) if top else "the strongest feature"
+    second = str(top[1].get("feature", "the next strongest feature")) if len(top) > 1 else "the next strongest feature"
+    positive = sum(1 for item in shap_values if float(item.get("value") or 0) > 0)
+    negative = sum(1 for item in shap_values if float(item.get("value") or 0) < 0)
+    probability_pct = f"{probability:.1%}"
+
+    if str(language or "").lower().startswith("ru"):
+        return {
+            "bar": (
+                f"Столбчатая диаграмма ранжирует все признаки по абсолютному вкладу SHAP. "
+                f"Наибольший вклад дает {first}; красные значения повышают расчетный риск, "
+                f"синие значения снижают его."
+            ),
+            "line": (
+                f"Линейная траектория показывает, как базовый уровень постепенно меняется под влиянием "
+                f"ведущих факторов и приходит к итоговой вероятности {probability_pct}. "
+                f"График удобен для объяснения последовательного накопления вклада."
+            ),
+            "decision": (
+                f"Decision plot показывает накопительный путь модели от базового значения к итоговой оценке. "
+                f"Он помогает увидеть, как {first}, {second} и остальные признаки последовательно меняют сигнал риска."
+            ),
+            "beeswarm": (
+                f"Диаграмма распределения показывает направление каждого SHAP-сигнала относительно нейтральной оси. "
+                f"В этом результате {positive} признаков смещают оценку вверх, а {negative} признаков смещают ее вниз."
+            ),
+            "waterfall": (
+                f"Waterfall-график показывает арифметику прогноза: от ожидаемого базового значения к индивидуальной оценке. "
+                f"Главные изменения связаны с {first} и {second}; это не диагноз, а объяснение модельного расчета."
+            ),
+        }
+
+    return {
+        "bar": (
+            f"The bar chart ranks all features by absolute SHAP contribution. "
+            f"The strongest driver is {first}; red values push the model risk upward, "
+            f"while blue values pull it downward."
+        ),
+        "line": (
+            f"The trajectory chart shows how the baseline estimate changes as the leading factors are added, "
+            f"ending at a model probability of {probability_pct}. It is best for explaining the step-by-step accumulation of risk signal."
+        ),
+        "beeswarm": (
+            f"The beeswarm-style spread shows each SHAP signal relative to the neutral axis. "
+            f"In this result, {positive} features move the estimate upward and {negative} move it downward."
+        ),
+        "waterfall": (
+            f"The waterfall chart shows the prediction arithmetic from expected baseline to individualized output. "
+            f"The largest changes are linked to {first} and {second}; this explains the model calculation, not a diagnosis."
+        ),
+    }
+
+
+def generate_shap_chart_explanations(
+    self,
+    prediction: int,
+    probability: float,
+    shap_values: List[Dict[str, Any]],
+    patient_data: List[float],
+    language: str = "en",
+    client_type: str = "patient",
+) -> Dict[str, str]:
+    """Generate short explanations for each SHAP visualization."""
+
+    _ = (self, prediction, patient_data, client_type)
+    language_code = _normalize_language(language)
+    fallback = _fallback_shap_chart_explanations(probability, shap_values, language_code)
+
+    if groq_client is None or not shap_values:
+        return fallback
+
+    top_factor_lines = _format_chart_driver_summary(shap_values, limit=8)
+    locale_instruction = (
+        "Respond in Russian." if language_code.startswith("ru") else "Respond in English."
+    )
+    prompt = f"""
+Write concise explanations for four SHAP visualizations in a pancreatic cancer risk-support research prototype.
+Return only valid JSON with exactly these string keys: bar, line, beeswarm, waterfall.
+Each value must be 1-2 sentences, clinically cautious, and tied to the supplied SHAP data.
+Do not diagnose cancer, do not recommend treatment, and do not override the model result.
+
+Risk probability: {probability:.1%}
+Top SHAP factors: {top_factor_lines}
+{locale_instruction}
+"""
+
+    try:
+        response = groq_client.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=500,
+        )
+        raw = repair_text_encoding(response.choices[0].message.content or "")
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        parsed = json.loads(match.group(0) if match else raw)
+        explanations = {
+            key: str(parsed.get(key) or fallback[key]).strip()
+            for key in ("bar", "line", "beeswarm", "waterfall")
+        }
+        joined = "\n".join(explanations.values())
+        if _contains_unsafe_claim(joined):
+            raise ValueError("Chart explanation contained unsafe wording")
+        if language_code.startswith("ru") and not is_readable_russian(joined):
+            raise ValueError("Chart explanation unreadable in requested language")
+        return explanations
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Falling back to template SHAP chart explanations: %s", exc)
+        return fallback
+
+
 def _build_audience_commentaries(
     self,
     prediction: int,
@@ -408,6 +579,7 @@ def _build_audience_commentaries(
 
 __all__ = [
     "generate_clinical_commentary",
+    "generate_shap_chart_explanations",
     "_generate_fallback_commentary",
     "_generate_ru_commentary",
     "_build_audience_commentaries",

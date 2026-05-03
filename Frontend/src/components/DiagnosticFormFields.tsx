@@ -10,11 +10,22 @@ interface FieldGroup {
 const FIELD_GROUPS: FieldGroup[] = [
   {
     titleKey: "lab_section_core",
-    keys: ["wbc", "rbc", "plt", "hgb", "hct", "mpv", "pdw", "mono"],
+    keys: ["wbc", "rbc", "plt", "hgb", "hct", "mpv", "pdw", "esr"],
   },
   {
-    titleKey: "lab_section_metabolic",
-    keys: ["baso_abs", "baso_pct", "glucose", "act", "bilirubin"],
+    titleKey: "lab_section_differential",
+    keys: [
+      "neut_abs",
+      "neut_pct",
+      "lymph_abs",
+      "lymph_pct",
+      "mono_abs",
+      "mono_pct",
+      "eos_abs",
+      "eos_pct",
+      "baso_abs",
+      "baso_pct",
+    ],
   },
 ];
 
@@ -26,12 +37,17 @@ const LABEL_HINTS: Record<RangeKey, string> = {
   hct: "lab_hint_hct",
   mpv: "lab_hint_mpv",
   pdw: "lab_hint_pdw",
-  mono: "lab_hint_mono",
+  neut_abs: "lab_hint_neut_abs",
+  neut_pct: "lab_hint_neut_pct",
+  lymph_abs: "lab_hint_lymph_abs",
+  lymph_pct: "lab_hint_lymph_pct",
+  mono_abs: "lab_hint_mono_abs",
+  mono_pct: "lab_hint_mono_pct",
+  eos_abs: "lab_hint_eos_abs",
+  eos_pct: "lab_hint_eos_pct",
   baso_abs: "lab_hint_baso_abs",
   baso_pct: "lab_hint_baso_pct",
-  glucose: "lab_hint_glucose",
-  act: "lab_hint_act",
-  bilirubin: "lab_hint_bilirubin",
+  esr: "lab_hint_esr",
 };
 
 export interface DiagnosticFormFieldsProps {

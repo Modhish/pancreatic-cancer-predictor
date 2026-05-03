@@ -110,13 +110,18 @@ const defaultForm = {
   hgb: "135",
   hct: "42",
   mpv: "9.5",
-  pdw: "14",
-  mono: "0.5",
+  pdw: "16",
+  neut_abs: "3.5",
+  neut_pct: "60",
+  lymph_abs: "2.0",
+  lymph_pct: "30",
+  mono_abs: "0.5",
+  mono_pct: "6",
+  eos_abs: "0.2",
+  eos_pct: "2",
   baso_abs: "0.03",
-  baso_pct: "0.8",
-  glucose: "5.2",
-  act: "28",
-  bilirubin: "12",
+  baso_pct: "0.5",
+  esr: "12",
 } as const;
 
 export type FormState = typeof defaultForm;
@@ -137,6 +142,8 @@ export interface AppResult {
   aiExplanation?: string;
   ai_explanation_b64?: string;
   aiExplanationB64?: string;
+  shap_chart_explanations?: Record<string, string>;
+  shapChartExplanations?: Record<string, string>;
   shap_values?: any[];
   shapValues?: any[];
   patient_values?: Record<string, number | string>;
@@ -634,6 +641,10 @@ export default function useAppState(
               data.ai_explanation_b64 ?? prev.ai_explanation_b64,
             audience_commentaries: mergedMap,
             audience_commentaries_by_lang: mergedByLang,
+            shap_chart_explanations:
+              (data.shap_chart_explanations as Record<string, string> | undefined) ??
+              (data.shapChartExplanations as Record<string, string> | undefined) ??
+              prev.shap_chart_explanations,
             client_type: effectiveClientType,
             language: incomingLanguage,
             risk_level: data.risk_level || prev.risk_level,

@@ -114,7 +114,9 @@ export default function DiagnosticAiCard(
             <div className="space-y-3">
               <p className="font-semibold">{aiStructured.header}</p>
               {aiStructured.subtitle && (
-                <p className="text-xs text-[var(--muted)]">{aiStructured.subtitle}</p>
+                <p className="text-xs text-[var(--muted)]">
+                  {aiStructured.subtitle}
+                </p>
               )}
               {aiStructured.sections.map((section) => (
                 <div key={section.title} className="space-y-1.5">

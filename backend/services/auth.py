@@ -21,8 +21,17 @@ TOKEN_MAX_AGE_SECONDS = int(os.getenv("AUTH_TOKEN_MAX_AGE_SECONDS", str(60 * 60 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+def _is_production_runtime() -> bool:
+    env_name = (os.getenv("FLASK_ENV") or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip().lower()
+    return env_name in {"prod", "production"}
+
+
 def _serializer() -> URLSafeTimedSerializer:
-    secret_key = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY") or "diagnoai-dev-secret"
+    secret_key = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY")
+    if not secret_key:
+        if _is_production_runtime():
+            raise RuntimeError("JWT_SECRET or SECRET_KEY must be configured in production")
+        secret_key = "diagnoai-dev-secret"
     return URLSafeTimedSerializer(secret_key=secret_key, salt="diagnoai-auth")
 
 
@@ -166,4 +175,3 @@ def require_auth(allowed_roles: Iterable[str] | None = None):
         return wrapper
 
     return decorator
-

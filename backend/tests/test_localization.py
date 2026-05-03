@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-EN_PROBABILITY_LABEL = "Risk probability"
-RU_PROBABILITY_LABEL = "Вероятность риска"
+EN_PROBABILITY_LABEL = "Screening probability"
+RU_PROBABILITY_LABEL = "Оценка риска"
 
 SAMPLE_PATIENT = {
     "wbc": 5.8,
@@ -12,13 +12,18 @@ SAMPLE_PATIENT = {
     "hgb": 135,
     "hct": 42,
     "mpv": 9.5,
-    "pdw": 14,
-    "mono": 0.5,
+    "pdw": 16,
+    "neut_abs": 3.5,
+    "neut_pct": 60,
+    "lymph_abs": 2.0,
+    "lymph_pct": 30,
+    "mono_abs": 0.5,
+    "mono_pct": 6,
+    "eos_abs": 0.2,
+    "eos_pct": 2,
     "baso_abs": 0.03,
-    "baso_pct": 0.8,
-    "glucose": 5.2,
-    "act": 28,
-    "bilirubin": 12,
+    "baso_pct": 0.5,
+    "esr": 12,
 }
 
 
@@ -38,9 +43,14 @@ def _count_cyrillic(text: str) -> int:
         ("ru", RU_PROBABILITY_LABEL, lambda text: _count_cyrillic(text) >= 20),
     ],
 )
-def test_predict_localized_probability_label(client, language, expected_label, validator):
+def test_predict_localized_probability_label(client, auth_headers, language, expected_label, validator):
     payload = {**SAMPLE_PATIENT, "client_type": "patient", "language": language}
-    response = client.post("/api/predict", data=json.dumps(payload), content_type="application/json")
+    response = client.post(
+        "/api/predict",
+        data=json.dumps(payload),
+        content_type="application/json",
+        headers=auth_headers,
+    )
     assert response.status_code == 200
     data = response.get_json()
 
@@ -50,9 +60,14 @@ def test_predict_localized_probability_label(client, language, expected_label, v
     assert validator(explanation)
 
 
-def test_commentary_ru_localized(client):
+def test_commentary_ru_localized(client, auth_headers):
     predict_payload = {**SAMPLE_PATIENT, "client_type": "patient", "language": "ru"}
-    predict_resp = client.post("/api/predict", data=json.dumps(predict_payload), content_type="application/json")
+    predict_resp = client.post(
+        "/api/predict",
+        data=json.dumps(predict_payload),
+        content_type="application/json",
+        headers=auth_headers,
+    )
     assert predict_resp.status_code == 200
     predict_json = predict_resp.get_json()
 
@@ -64,7 +79,10 @@ def test_commentary_ru_localized(client):
         "client_type": "patient",
     }
     commentary_resp = client.post(
-        "/api/commentary", data=json.dumps(commentary_payload), content_type="application/json"
+        "/api/commentary",
+        data=json.dumps(commentary_payload),
+        content_type="application/json",
+        headers=auth_headers,
     )
     assert commentary_resp.status_code == 200
     commentary_json = commentary_resp.get_json()

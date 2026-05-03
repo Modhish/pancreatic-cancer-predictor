@@ -28,7 +28,7 @@ def execute_diagnostic_pipeline(
     diagnostic_system,
     payload: Dict[str, Any],
 ) -> tuple[Dict[str, Any] | None, Dict[str, Any] | None, int]:
-    """Execute the full diagnostic flow returning analysis data or an error payload."""
+    """Execute the full risk assessment flow returning analysis data or an error payload."""
     try:
         features, normalized = parse_patient_inputs(payload)
     except (TypeError, ValueError) as exc:
@@ -84,6 +84,18 @@ def execute_diagnostic_pipeline(
     except Exception:
         audience_commentaries = {client_type: ai_explanation}
 
+    try:
+        shap_chart_explanations = diagnostic_system.generate_shap_chart_explanations(
+            prediction,
+            probability,
+            shap_values,
+            features,
+            language=language,
+            client_type=client_type,
+        )
+    except Exception:
+        shap_chart_explanations = {}
+
     ai_explanation_b64 = encode_text_base64(ai_explanation)
     analysis = {
         "prediction": int(prediction),
@@ -97,6 +109,7 @@ def execute_diagnostic_pipeline(
         "language": language,
         "client_type": client_type,
         "audience_commentaries": audience_commentaries,
+        "shap_chart_explanations": shap_chart_explanations,
     }
 
     return analysis, None, 200

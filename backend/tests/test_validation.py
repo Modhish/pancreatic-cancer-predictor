@@ -36,12 +36,17 @@ def test_validate_medical_data_out_of_range():
         "hct": 10.0,  # invalid
         "mpv": 20.0,  # invalid
         "pdw": 50.0,  # invalid
-        "mono": 2.0,  # invalid
+        "neut_abs": 20.0,  # invalid
+        "neut_pct": 95.0,  # invalid
+        "lymph_abs": 10.0,  # invalid
+        "lymph_pct": 90.0,  # invalid
+        "mono_abs": 2.0,  # invalid
+        "mono_pct": 30.0,  # invalid
+        "eos_abs": 2.0,  # invalid
+        "eos_pct": 20.0,  # invalid
         "baso_abs": 1.0,  # invalid
         "baso_pct": 10.0,  # invalid
-        "glucose": 20.0,  # invalid
-        "act": 100.0,  # invalid
-        "bilirubin": 100.0,  # invalid
+        "esr": 100.0,  # invalid
     }
     ok, errors = system.validate_medical_data(bad)
     assert ok is False
@@ -49,11 +54,11 @@ def test_validate_medical_data_out_of_range():
 
 
 def test_rule_based_prediction_thresholds():
+    from core.constants import FEATURE_DEFAULTS
     from services.model_engine import MedicalDiagnosticSystem
 
     system = MedicalDiagnosticSystem()
-    # Very low-risk values near normal
-    features = [6.5, 4.5, 250, 140, 42, 9.5, 14, 0.5, 0.03, 0.8, 5.0, 28, 12]
+    features = [float(default) for _, default in FEATURE_DEFAULTS]
     pred, prob = system._rule_based_prediction(features)
     assert 0.1 <= prob <= 0.95
     assert pred in (0, 1)

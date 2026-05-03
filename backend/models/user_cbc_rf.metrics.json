@@ -1,0 +1,229 @@
+{
+  "model_name": "Random Forest Classifier",
+  "dataset_name": "User CBC dataset from Excel workbook",
+  "created_at": "2026-05-02T20:06:46.244953+00:00",
+  "source_csv": "D:\\Personal\\Ahmed\\4th_year\\Bachelor's_Project\\pancreatic-cancer-predictor\\datasets\\user_cbc_dataset.csv",
+  "target_name": "label",
+  "feature_columns": [
+    "wbc",
+    "rbc",
+    "plt",
+    "hgb",
+    "hct",
+    "mpv",
+    "pdw",
+    "neut_abs",
+    "neut_pct",
+    "lymph_abs",
+    "lymph_pct",
+    "mono_abs",
+    "mono_pct",
+    "eos_abs",
+    "eos_pct",
+    "baso_abs",
+    "baso_pct",
+    "esr"
+  ],
+  "random_state": 42,
+  "split": {
+    "test_size": 0.2,
+    "validation_size": 0.1,
+    "train_rows": 841,
+    "validation_rows": 121,
+    "test_rows": 241
+  },
+  "class_balance": {
+    "overall": {
+      "negative": 1115,
+      "positive": 88
+    },
+    "train": {
+      "negative": 780,
+      "positive": 61
+    },
+    "validation": {
+      "negative": 112,
+      "positive": 9
+    },
+    "test": {
+      "negative": 223,
+      "positive": 18
+    }
+  },
+  "best_params": {
+    "n_estimators": 200,
+    "max_depth": null,
+    "min_samples_leaf": 1
+  },
+  "selected_threshold": 0.3,
+  "feature_importances": [
+    {
+      "feature": "esr",
+      "importance": 0.464169
+    },
+    {
+      "feature": "pdw",
+      "importance": 0.159387
+    },
+    {
+      "feature": "plt",
+      "importance": 0.049236
+    },
+    {
+      "feature": "mpv",
+      "importance": 0.038054
+    },
+    {
+      "feature": "lymph_pct",
+      "importance": 0.02934
+    },
+    {
+      "feature": "mono_abs",
+      "importance": 0.025809
+    },
+    {
+      "feature": "neut_abs",
+      "importance": 0.024352
+    },
+    {
+      "feature": "mono_pct",
+      "importance": 0.024312
+    },
+    {
+      "feature": "hgb",
+      "importance": 0.023617
+    },
+    {
+      "feature": "lymph_abs",
+      "importance": 0.022798
+    },
+    {
+      "feature": "baso_pct",
+      "importance": 0.020717
+    },
+    {
+      "feature": "rbc",
+      "importance": 0.019774
+    },
+    {
+      "feature": "hct",
+      "importance": 0.019586
+    },
+    {
+      "feature": "neut_pct",
+      "importance": 0.0192
+    },
+    {
+      "feature": "eos_pct",
+      "importance": 0.015572
+    },
+    {
+      "feature": "wbc",
+      "importance": 0.015313
+    },
+    {
+      "feature": "eos_abs",
+      "importance": 0.015049
+    },
+    {
+      "feature": "baso_abs",
+      "importance": 0.013715
+    }
+  ],
+  "train_metrics": {
+    "accuracy": 0.998811,
+    "precision": 0.983871,
+    "recall": 1.0,
+    "specificity": 0.998718,
+    "f1_score": 0.99187,
+    "mcc": 0.991267,
+    "log_loss": 0.026387,
+    "brier_score": 0.004124,
+    "pr_auc": 1.0,
+    "threshold": 0.3,
+    "rows": 841,
+    "class_balance": {
+      "negative": 780,
+      "positive": 61
+    },
+    "confusion_matrix": {
+      "tn": 779,
+      "fp": 1,
+      "fn": 0,
+      "tp": 61
+    },
+    "roc_auc": 1.0
+  },
+  "validation_metrics": {
+    "accuracy": 0.983471,
+    "precision": 0.888889,
+    "recall": 0.888889,
+    "specificity": 0.991071,
+    "f1_score": 0.888889,
+    "mcc": 0.87996,
+    "log_loss": 0.078452,
+    "brier_score": 0.022201,
+    "pr_auc": 0.945988,
+    "threshold": 0.3,
+    "rows": 121,
+    "class_balance": {
+      "negative": 112,
+      "positive": 9
+    },
+    "confusion_matrix": {
+      "tn": 111,
+      "fp": 1,
+      "fn": 1,
+      "tp": 8
+    },
+    "roc_auc": 0.99504
+  },
+  "validation_threshold_search_best": {
+    "accuracy": 0.983471,
+    "precision": 0.888889,
+    "recall": 0.888889,
+    "specificity": 0.991071,
+    "f1_score": 0.888889,
+    "mcc": 0.87996,
+    "log_loss": 0.078452,
+    "brier_score": 0.022201,
+    "pr_auc": 0.945988,
+    "threshold": 0.3,
+    "rows": 121,
+    "class_balance": {
+      "negative": 112,
+      "positive": 9
+    },
+    "confusion_matrix": {
+      "tn": 111,
+      "fp": 1,
+      "fn": 1,
+      "tp": 8
+    },
+    "roc_auc": 0.99504
+  },
+  "metrics": {
+    "accuracy": 0.975104,
+    "precision": 0.875,
+    "recall": 0.777778,
+    "specificity": 0.991031,
+    "f1_score": 0.823529,
+    "mcc": 0.811813,
+    "log_loss": 0.096632,
+    "brier_score": 0.025834,
+    "pr_auc": 0.879479,
+    "threshold": 0.3,
+    "rows": 241,
+    "class_balance": {
+      "negative": 223,
+      "positive": 18
+    },
+    "confusion_matrix": {
+      "tn": 221,
+      "fp": 2,
+      "fn": 4,
+      "tp": 14
+    },
+    "roc_auc": 0.974963
+  }
+}

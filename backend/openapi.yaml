@@ -5,10 +5,17 @@ info:
   description: Minimal OpenAPI spec for core endpoints.
 servers:
   - url: http://localhost:5000
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
 paths:
   /api/predict:
     post:
-      summary: Submit labs for prediction
+      summary: Submit labs for risk assessment
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -23,12 +30,17 @@ paths:
                 hct: { type: number }
                 mpv: { type: number }
                 pdw: { type: number }
-                mono: { type: number }
+                neut_abs: { type: number }
+                neut_pct: { type: number }
+                lymph_abs: { type: number }
+                lymph_pct: { type: number }
+                mono_abs: { type: number }
+                mono_pct: { type: number }
+                eos_abs: { type: number }
+                eos_pct: { type: number }
                 baso_abs: { type: number }
                 baso_pct: { type: number }
-                glucose: { type: number }
-                act: { type: number }
-                bilirubin: { type: number }
+                esr: { type: number }
                 language: { type: string, default: en }
                 client_type: { type: string, default: patient }
       responses:
@@ -47,6 +59,8 @@ paths:
   /api/commentary:
     post:
       summary: Regenerate AI commentary
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -70,7 +84,9 @@ paths:
                   ai_explanation: { type: string }
   /api/report:
     post:
-      summary: Generate a PDF diagnostic report
+      summary: Generate a PDF risk assessment report
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -101,4 +117,3 @@ paths:
       summary: Model information
       responses:
         '200': { description: OK }
-

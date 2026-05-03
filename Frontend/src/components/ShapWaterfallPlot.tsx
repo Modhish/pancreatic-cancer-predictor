@@ -2,6 +2,7 @@ import React from "react";
 import { ScatterChart } from "lucide-react";
 
 import { WaterfallData } from "../hooks/useShapInsights";
+import { formatShapFeatureLabel } from "../utils/featureLabels";
 
 export interface ShapWaterfallPlotProps {
   shapWaterfall: WaterfallData;
@@ -18,16 +19,17 @@ export default function ShapWaterfallPlot(
 ): JSX.Element {
   const { shapWaterfall, shapRange, shapFxDisplay, t } = props;
 
-  const width = 640;
-  const stepHeight = 36;
-  const paddingY = 24;
+  const width = 880;
+  const stepHeight = 38;
+  const paddingY = 28;
   const svgHeight = shapWaterfall.steps.length * stepHeight + paddingY * 2;
-  const plotWidth = width - 160;
+  const labelWidth = 220;
+  const plotWidth = width - labelWidth - 40;
 
   const scaleX = (value: number) => {
     const clampedRange = Math.max(shapRange, 1e-6);
     return (
-      120 +
+      labelWidth +
       ((value - shapWaterfall.min) / clampedRange) * (plotWidth - 40)
     );
   };
@@ -50,8 +52,13 @@ export default function ShapWaterfallPlot(
           {shapWaterfall.baseline.toFixed(3)}
         </span>
       </p>
-      <div>
-        <svg viewBox={`0 0 ${width} ${svgHeight}`} className="w-full">
+      <div className="overflow-x-auto pb-2">
+        <svg
+          viewBox={`0 0 ${width} ${svgHeight}`}
+          className="min-w-[760px] w-full"
+          style={{ height: `${Math.min(Math.max(svgHeight, 340), 760)}px` }}
+          preserveAspectRatio="xMidYMin meet"
+        >
           <defs>
             <pattern
               id="wf-grid"
@@ -68,7 +75,7 @@ export default function ShapWaterfallPlot(
             </pattern>
           </defs>
           <rect
-            x="120"
+            x={labelWidth}
             y={paddingY}
             width={plotWidth - 40}
             height={svgHeight - paddingY * 2}
@@ -76,6 +83,7 @@ export default function ShapWaterfallPlot(
             rx="4"
           />
           {shapWaterfall.steps.map((step, idx) => {
+            const label = formatShapFeatureLabel(step.feature, t, step.featureKey);
             const yTop = paddingY + idx * stepHeight + 6;
             const yBottom = yTop + 20;
             const yMid = (yTop + yBottom) / 2;
@@ -98,12 +106,12 @@ export default function ShapWaterfallPlot(
             return (
               <g key={`${step.feature}-${idx}`}>
                 <text
-                  x={90}
+                  x={labelWidth - 18}
                   y={yMid + 3}
                   textAnchor="end"
                   className="fill-[var(--muted)] text-[12px]"
                 >
-                  {step.feature}
+                  {label.length > 28 ? `${label.slice(0, 27)}...` : label}
                 </text>
                 <polygon points={points} fill={color} opacity={0.9} />
                 <text

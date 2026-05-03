@@ -149,7 +149,7 @@ function Navigation({
               </h1>
               <p className="mt-0.5 flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-[var(--muted)]">
                 <span className="glow-dot inline-flex h-2 w-2 rounded-full bg-[var(--accent)]" />
-                Pancreas Diagnostic
+                Pancreas Risk Assessment
               </p>
             </div>
           </motion.button>

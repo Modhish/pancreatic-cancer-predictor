@@ -1,0 +1,46 @@
+{
+  "source_workbook": "D:\\Personal\\Ahmed\\4th_year\\Bachelor's_Project\\pancreatic-cancer-predictor\\Набор данных.xlsx",
+  "sheet_used": "first worksheet",
+  "label_source_column": "Наличие болезни",
+  "label_mapping": {
+    "нет": 0,
+    "да": 1
+  },
+  "selected_columns": {
+    "wbc": "WBC",
+    "rbc": "RBC",
+    "plt": "PLT",
+    "hgb": "HGB",
+    "hct": "HCT",
+    "mpv": "MPV",
+    "pdw": "PDW",
+    "neut_abs": "NEUT#",
+    "neut_pct": "NEUT%",
+    "lymph_abs": "LYMPH#",
+    "lymph_pct": "LYMPH%",
+    "mono_abs": "MONO#",
+    "mono_pct": "MONO%",
+    "eos_abs": "EOS#",
+    "eos_pct": "EOS%",
+    "baso_abs": "BASO#",
+    "baso_pct": "BASO%",
+    "esr": "СОЭ"
+  },
+  "source_rows": 1254,
+  "clean_rows": 1203,
+  "dropped_rows_missing_features": 51,
+  "dropped_rows_unknown_label": 0,
+  "original_label_counts": {
+    "нет": 1115,
+    "да": 139
+  },
+  "clean_label_counts": {
+    "0": 1115,
+    "1": 88
+  },
+  "notes": [
+    "The workbook contains many extra columns that were intentionally excluded.",
+    "Chemistry and coagulation columns such as glucose, bilirubin, and APTT are too sparse to support the old 13-feature schema.",
+    "This cleaned dataset keeps the high-coverage CBC-style features present across almost the entire sheet."
+  ]
+}

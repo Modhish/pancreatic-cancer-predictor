@@ -3,18 +3,23 @@ from typing import Any, Dict
 
 FEATURE_DEFAULTS = [
     ("wbc", 5.8),
-    ("rbc", 4.0),
-    ("plt", 184.0),
-    ("hgb", 127.0),
-    ("hct", 40.0),
-    ("mpv", 11.0),
+    ("rbc", 4.5),
+    ("plt", 220.0),
+    ("hgb", 135.0),
+    ("hct", 42.0),
+    ("mpv", 9.5),
     ("pdw", 16.0),
-    ("mono", 0.42),
-    ("baso_abs", 0.01),
-    ("baso_pct", 0.2),
-    ("glucose", 6.3),
-    ("act", 26.0),
-    ("bilirubin", 17.0),
+    ("neut_abs", 3.5),
+    ("neut_pct", 60.0),
+    ("lymph_abs", 2.0),
+    ("lymph_pct", 30.0),
+    ("mono_abs", 0.5),
+    ("mono_pct", 6.0),
+    ("eos_abs", 0.2),
+    ("eos_pct", 2.0),
+    ("baso_abs", 0.03),
+    ("baso_pct", 0.5),
+    ("esr", 12.0),
 ]
 
 
@@ -45,12 +50,17 @@ FEATURE_LABELS = {
         "HCT": "Hematocrit",
         "MPV": "Mean platelet volume",
         "PDW": "Platelet distribution width",
-        "MONO": "Monocytes fraction",
+        "NEUT_ABS": "Neutrophils (absolute)",
+        "NEUT_PCT": "Neutrophils (%)",
+        "LYMPH_ABS": "Lymphocytes (absolute)",
+        "LYMPH_PCT": "Lymphocytes (%)",
+        "MONO_ABS": "Monocytes (absolute)",
+        "MONO_PCT": "Monocytes (%)",
+        "EOS_ABS": "Eosinophils (absolute)",
+        "EOS_PCT": "Eosinophils (%)",
         "BASO_ABS": "Basophils (absolute)",
         "BASO_PCT": "Basophils (%)",
-        "GLUCOSE": "Fasting glucose",
-        "ACT": "Activated clotting time",
-        "BILIRUBIN": "Total bilirubin",
+        "ESR": "Erythrocyte sedimentation rate",
     },
     "ru": {
         "WBC": "Количество белых кровяных клеток",
@@ -60,12 +70,8 @@ FEATURE_LABELS = {
         "HCT": "Гематокрит",
         "MPV": "Средний объем тромбоцита",
         "PDW": "Ширина распределения тромбоцитов",
-        "MONO": "Фракция моноцитов",
         "BASO_ABS": "Базофилы (абсолютное)",
         "BASO_PCT": "Базофилы (%)",
-        "GLUCOSE": "Глюкоза натощак",
-        "ACT": "Время активации свертывания",
-        "BILIRUBIN": "Общий билирубин",
     },
 }
 
@@ -82,14 +88,33 @@ RU_FEATURE_LABELS_OLD: dict[str, str] = {
     "HCT": "Гематокрит",
     "MPV": "Средний объем тромбоцита",
     "PDW": "Ширина распределения тромбоцитов",
-    "MONO": "Фракция моноцитов",
     "BASO_ABS": "Базофилы (абсолютное)",
     "BASO_PCT": "Базофилы (%)",
-    "GLUCOSE": "Глюкоза натощак",
-    "ACT": "Время активации свертывания",
-    "BILIRUBIN": "Общий билирубин",
 }
 
+FEATURE_LABELS["ru"] = RU_FEATURE_LABELS
+
+RU_FEATURE_LABELS = {
+    "WBC": "Количество лейкоцитов",
+    "RBC": "Количество эритроцитов",
+    "PLT": "Тромбоциты",
+    "HGB": "Гемоглобин",
+    "HCT": "Гематокрит",
+    "MPV": "Средний объем тромбоцитов",
+    "PDW": "Ширина распределения тромбоцитов",
+    "NEUT_ABS": "Нейтрофилы (абс.)",
+    "NEUT_PCT": "Нейтрофилы (%)",
+    "LYMPH_ABS": "Лимфоциты (абс.)",
+    "LYMPH_PCT": "Лимфоциты (%)",
+    "MONO_ABS": "Моноциты (абс.)",
+    "MONO_PCT": "Моноциты (%)",
+    "EOS_ABS": "Эозинофилы (абс.)",
+    "EOS_PCT": "Эозинофилы (%)",
+    "BASO_ABS": "Базофилы (абс.)",
+    "BASO_PCT": "Базофилы (%)",
+    "ESR": "СОЭ",
+}
+RU_FEATURE_LABELS_OLD = RU_FEATURE_LABELS
 FEATURE_LABELS["ru"] = RU_FEATURE_LABELS
 
 COMMENTARY_LOCALE = {
@@ -373,7 +398,7 @@ COMMENTARY_LOCALE = {
                 "Call your doctor or emergency services if severe warning signs appear.",
             ],
             "reminder_title": "CARE REMINDER",
-            "reminder_text": "Bring this report to your medical team. They will confirm the diagnosis and guide treatment.",
+            "reminder_text": "Bring this report to your medical team. They will interpret it in clinical context and decide whether any follow-up is needed.",
             "audience_guidance": "Primary audience: patient or caregiver. Use encouraging, clear language while keeping explanations medically accurate.",
             "outline_template": (
                 "Deliver the response using the exact headings below, each separated by a single blank line. "
@@ -730,7 +755,7 @@ COMMENTARY_LOCALE = {
                 "Какие симптомы или показатели мне стоит отслеживать дома?",
             ],
             "reminder_title": "ВАЖНО",
-            "reminder_text": "Покажите этот отчет своей медицинской команде. Только они подтверждают диагноз и выбирают лечение.",
+            "reminder_text": "Покажите этот отчет своей медицинской команде. Только она интерпретирует результат в клиническом контексте и решает, нужно ли дальнейшее обследование.",
             "audience_guidance": (
                 "Основная аудитория: пациент или его близкие. Используйте поддерживающий тон и понятный язык, сохраняя медицинскую точность."
             ),

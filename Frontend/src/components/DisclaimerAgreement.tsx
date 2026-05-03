@@ -39,7 +39,7 @@ export default function DisclaimerAgreement({
 
   return (
     <div className="relative min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 lg:gap-6">
+      <div className="mx-auto flex max-w-[1580px] flex-col gap-4 lg:gap-6">
         <div className="flex flex-col gap-4 rounded-[2rem] border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_82%,transparent)] p-4 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--accent)] shadow-lg shadow-[var(--accent)]/25">
@@ -112,7 +112,7 @@ export default function DisclaimerAgreement({
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.22fr)_minmax(360px,0.78fr)]">
           <section className="card-sleek rounded-[2rem] p-6 sm:p-8 lg:p-10">
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--muted)]">
               <ShieldCheck className="h-4 w-4 text-[var(--accent)]" />

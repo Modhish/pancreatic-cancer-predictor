@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { LineChart } from "lucide-react";
 
 import { ShapItem, WaterfallData } from "../hooks/useShapInsights";
+import { formatShapFeatureLabel } from "../utils/featureLabels";
 
 export interface ShapLineChartProps {
   shapSummary: ShapItem[];
@@ -13,10 +14,11 @@ export interface ShapLineChartProps {
 const POS_COLOR = "#e11d48";
 const NEG_COLOR = "#0ea5e9";
 const NEUTRAL_COLOR = "#475569";
-const MAX_STEPS = 6;
+const MAX_STEPS = 8;
 
 interface Point {
   label: string;
+  featureKey?: string | null;
   y: number;
   contribution: number;
   featureValue?: number | string;
@@ -46,9 +48,12 @@ export default function ShapLineChart(
       running += step.value;
       pts.push({
         label: step.feature,
+        featureKey: step.featureKey,
         y: running,
         contribution: step.value,
-        featureValue: patientValues?.[step.feature],
+        featureValue:
+          (step.featureKey && patientValues?.[step.featureKey]) ||
+          patientValues?.[step.feature],
         direction:
           step.value > 0 ? "positive" : step.value < 0 ? "negative" : "neutral",
       });
@@ -75,7 +80,7 @@ export default function ShapLineChart(
   const paddedMin = minY - span * 0.15;
   const paddedMax = maxY + span * 0.15;
 
-  const width = 720;
+  const width = 860;
   const height = 260;
   const paddingX = 60;
   const paddingY = 30;
@@ -115,8 +120,8 @@ export default function ShapLineChart(
         </div>
       </div>
 
-      <div className="mt-4">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full">
+      <div className="mt-4 overflow-x-auto pb-2">
+        <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[760px] w-full">
           {yTicks.map((tick, idx) => {
             const y = scaleY(tick);
             return (
@@ -173,6 +178,9 @@ export default function ShapLineChart(
           })}
 
           {points.map((point, idx) => {
+            const label = point.featureKey
+              ? formatShapFeatureLabel(point.label, t, point.featureKey)
+              : point.label;
             const color =
               point.direction === "positive"
                 ? POS_COLOR
@@ -195,36 +203,45 @@ export default function ShapLineChart(
                   x={x}
                   y={y - 10}
                   textAnchor="middle"
-                  className="text-[10px] font-semibold fill-[var(--text)]"
+                  className="text-[9px] font-semibold fill-[var(--text)]"
                 >
-                  {point.label}
+                  {label.length > 16 ? `${label.slice(0, 15)}...` : label}
                 </text>
               </g>
             );
           })}
 
-          {points.map((point, idx) => (
-            <text
-              key={`xlabel-${point.label}-${idx}`}
-              x={scaleX(idx)}
-              y={height - 6}
-              textAnchor="middle"
-              className="text-[10px] fill-[var(--muted)]"
-            >
-              {point.label}
-            </text>
-          ))}
+          {points.map((point, idx) => {
+            const label = point.featureKey
+              ? formatShapFeatureLabel(point.label, t, point.featureKey)
+              : point.label;
+            return (
+              <text
+                key={`xlabel-${point.label}-${idx}`}
+                x={scaleX(idx)}
+                y={height - 6}
+                textAnchor="middle"
+                className="text-[10px] fill-[var(--muted)]"
+              >
+                {label.length > 12 ? `${label.slice(0, 11)}...` : label}
+              </text>
+            );
+          })}
         </svg>
       </div>
 
       <div className="mt-4 grid gap-2 text-[0.75rem] text-[var(--muted)]">
-        {points.slice(1, -1).map((p) => (
+        {points.slice(1, -1).map((p) => {
+          const label = p.featureKey
+            ? formatShapFeatureLabel(p.label, t, p.featureKey)
+            : p.label;
+          return (
           <div
             key={p.label}
             className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
           >
             <div className="flex flex-col">
-              <span className="font-semibold text-[var(--text)]">{p.label}</span>
+              <span className="font-semibold text-[var(--text)]">{label}</span>
               <span className="text-[0.7rem] text-[var(--muted)]">
                 {t("shap_line_patient_value")}: {formatValue(p.featureValue)}
               </span>
@@ -241,7 +258,8 @@ export default function ShapLineChart(
               {formatDelta(p.contribution)}
             </span>
           </div>
-        ))}
+          );
+        })}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("shap_line_net")}:{" "}
           <span className="font-semibold text-[var(--text)]">

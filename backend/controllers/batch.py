@@ -4,6 +4,7 @@ from flask import jsonify, request
 
 from core.settings import logger, rate_limit
 from core.security import audit_event, current_role, get_request_id, require_role
+from services.auth import require_auth
 from services import process_batch_csv
 
 from . import api_bp
@@ -11,6 +12,7 @@ from . import api_bp
 
 @api_bp.route("/batch-predict", methods=["POST"])
 @rate_limit("20/minute")
+@require_auth(["doctor", "researcher", "admin"])
 @require_role(["researcher", "clinician", "admin"])
 def batch_predict():
     """Batch CSV prediction endpoint with calibration summary."""

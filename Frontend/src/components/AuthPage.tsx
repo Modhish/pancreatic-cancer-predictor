@@ -53,6 +53,7 @@ export default function AuthPage({
   onSignUp,
   onSwitchMode,
 }: AuthPageProps): JSX.Element {
+  const isSignIn = mode === "signin";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
@@ -96,53 +97,58 @@ export default function AuthPage({
   return (
     <section
       id={mode}
-      className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-8 lg:px-12"
+      className={`mx-auto w-full px-4 sm:px-8 lg:px-12 ${
+        isSignIn
+          ? "flex min-h-[70vh] max-w-2xl items-center justify-center py-16"
+          : "max-w-[1580px] py-12"
+      }`}
     >
-      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="card-sleek rounded-[2rem] p-8 sm:p-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--muted)]">
-            <ShieldCheck className="h-4 w-4 text-[var(--accent)]" />
-            Secure Access
-          </div>
+      <div
+        className={`w-full ${
+          isSignIn ? "max-w-xl" : "grid gap-8 xl:grid-cols-[1.08fr_0.92fr]"
+        }`}
+      >
+        {!isSignIn && (
+          <div className="card-sleek rounded-[2rem] p-8 sm:p-10">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--muted)]">
+              <ShieldCheck className="h-4 w-4 text-[var(--accent)]" />
+              Secure Access
+            </div>
 
-          <h1 className="mt-6 font-display text-4xl font-bold text-[var(--text)]">
-            {mode === "signin"
-              ? "Sign in to your DiagnoAI workspace."
-              : "Create a role-based DiagnoAI account."}
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--muted)]">
-            {mode === "signin"
-              ? "Access your saved analyses, profile history, and role-specific tools."
-              : "Choose the role that matches how you will use the platform. Your account controls history, signed analyses, and access to researcher analytics."}
-          </p>
+            <h1 className="mt-6 font-display text-4xl font-bold text-[var(--text)]">
+              Create a role-based DiagnoAI account.
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-8 text-[var(--muted)]">
+              Choose the role that matches how you will use the platform. Your account controls history, signed analyses, and access to researcher analytics.
+            </p>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {roleCards.map(({ role: cardRole, title, description, icon: Icon }) => {
-              const selected = role === cardRole;
-              return (
-                <button
-                  key={cardRole}
-                  type="button"
-                  onClick={() => setRole(cardRole)}
-                  disabled={mode === "signin"}
-                  className={`rounded-3xl border p-5 text-left transition ${
-                    selected
-                      ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--accent)_8%)]"
-                      : "border-[var(--border)] bg-[var(--surface-2)]"
-                  } ${mode === "signin" ? "cursor-default opacity-70" : ""}`}
-                >
-                  <Icon className="h-5 w-5 text-[var(--accent)]" />
-                  <p className="mt-4 font-display text-lg font-semibold text-[var(--text)]">
-                    {title}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                    {description}
-                  </p>
-                </button>
-              );
-            })}
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              {roleCards.map(({ role: cardRole, title, description, icon: Icon }) => {
+                const selected = role === cardRole;
+                return (
+                  <button
+                    key={cardRole}
+                    type="button"
+                    onClick={() => setRole(cardRole)}
+                    className={`rounded-3xl border p-5 text-left transition ${
+                      selected
+                        ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--surface)_80%,var(--accent)_8%)]"
+                        : "border-[var(--border)] bg-[var(--surface-2)]"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 text-[var(--accent)]" />
+                    <p className="mt-4 font-display text-lg font-semibold text-[var(--text)]">
+                      {title}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                      {description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="card-sleek rounded-[2rem] p-8 sm:p-10">
           <div className="flex items-center gap-3">

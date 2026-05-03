@@ -1,6 +1,7 @@
 import React from "react";
 
 import { ShapItem } from "../hooks/useShapInsights";
+import { formatShapFeatureLabel } from "../utils/featureLabels";
 
 export interface ShapBarPlotProps {
   shapSummary: ShapItem[];
@@ -16,8 +17,7 @@ export default function ShapBarPlot(
   const { shapSummary, t } = props;
 
   const rows = [...shapSummary]
-    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-    .slice(0, 8);
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
   const maxValue = Math.max(...rows.map((entry) => Math.abs(entry.value)), 0.001);
   const minFillPercent = 25;
@@ -47,17 +47,20 @@ export default function ShapBarPlot(
         </div>
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 max-h-[520px] space-y-3 overflow-y-auto pr-2">
         {rows.map((entry) => {
+          const label = formatShapFeatureLabel(entry.feature, t, entry.featureKey);
           const normalized = Math.abs(entry.value) / maxValue;
           const width =
             Math.min(100, minFillPercent + normalized * (100 - minFillPercent));
           const positive = entry.value >= 0;
           const formatted = `${positive ? "+" : ""}${entry.value.toFixed(3)}`;
           return (
-            <div key={entry.feature} className="space-y-1 w-full">
-              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                <span>{entry.feature}</span>
+            <div key={entry.feature} className="grid gap-2 sm:grid-cols-[minmax(150px,0.42fr)_minmax(220px,1fr)] sm:items-center">
+              <div className="flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                <span className="min-w-0 truncate" title={label}>
+                  {label}
+                </span>
                 <span className={positive ? "text-rose-500" : "text-blue-500"}>
                   {formatted}
                 </span>

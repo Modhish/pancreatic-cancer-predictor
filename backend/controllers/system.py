@@ -19,6 +19,7 @@ def health():
             "status": "ok",
             "timestamp": datetime.now().isoformat(),
             "model_loaded": diagnostic_system.model is not None,
+            "runtime_mode": diagnostic_system.model_metadata.get("mode"),
             "ai_client_available": groq_client is not None,
         }
     )
@@ -33,7 +34,10 @@ def system_status():
             "status": "ok",
             "timestamp": datetime.now().isoformat(),
             "model_loaded": diagnostic_system.model is not None,
+            "runtime_mode": diagnostic_system.model_metadata.get("mode"),
+            "model_name": diagnostic_system.model_metadata.get("model_name"),
             "model_metrics": diagnostic_system.model_metrics,
+            "model_metadata": diagnostic_system.model_metadata,
             "ai_commentary": groq_client is not None,
             "features": {
                 "order": FEATURE_ORDER,
@@ -53,11 +57,13 @@ def model_info():
     metrics = diagnostic_system.model_metrics
     return jsonify(
         {
-            "model_name": "Random Forest Classifier v2.1.0",
+            "model_name": diagnostic_system.model_metadata.get("model_name"),
             "model_loaded": diagnostic_system.model is not None,
+            "runtime_mode": diagnostic_system.model_metadata.get("mode"),
             "feature_count": len(FEATURE_ORDER),
             "features": FEATURE_NAMES,
             "metrics": metrics,
+            "metadata": diagnostic_system.model_metadata,
             "guidelines": diagnostic_system.guideline_snapshot(),
         }
     )

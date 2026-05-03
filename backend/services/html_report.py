@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from flask import render_template
 from playwright.sync_api import Playwright, sync_playwright
 
-from core.constants import FEATURE_LABELS
+from core.constants import FEATURE_DEFAULTS, FEATURE_LABELS
 from services.model_engine import MEDICAL_RANGES
 from utils.text import repair_text_encoding
 
@@ -19,22 +19,6 @@ RISK_COLORS = {
     "High": (220, 38, 38),
     "Moderate": (217, 119, 6),
     "Low": (22, 163, 74),
-}
-
-RU_LAB_LABELS = {
-    "WBC": "Лейкоциты",
-    "RBC": "Эритроциты",
-    "PLT": "Тромбоциты",
-    "HGB": "Гемоглобин",
-    "HCT": "Гематокрит",
-    "MPV": "Средний объем тромбоцитов",
-    "PDW": "Ширина распределения тромбоцитов",
-    "MONO": "Моноциты",
-    "BASO_ABS": "Базофилы (абс.)",
-    "BASO_PCT": "Базофилы (%)",
-    "GLUCOSE": "Глюкоза натощак",
-    "ACT": "Активированное время свертывания",
-    "BILIRUBIN": "Общий билирубин",
 }
 
 COPY = {
@@ -60,9 +44,9 @@ COPY = {
             "audience": "Audience",
             "disclaimer": "Legal disclaimer",
         },
-        "cover_intended_use_value": "Clinical decision support",
+        "cover_intended_use_value": "Risk assessment support",
         "cover_disclaimer": "AI-assisted decision support; not diagnostic.",
-        "executive_title": "Executive Clinical Summary",
+        "executive_title": "Executive Risk Summary",
         "executive_summary": {
             "High": (
                 "The model estimates a {risk} category with an approximate probability of {probability}%. "
@@ -104,18 +88,18 @@ COPY = {
         },
         "impact_legend": "↑ increases risk contribution, ↓ decreases risk contribution, • neutral influence.",
         "explainability_empty": "Explainability data is unavailable.",
-        "interpretation_title": "AI Clinical Interpretation",
-        "interpretation_empty": "No AI clinical interpretation is available for this audience.",
+        "interpretation_title": "AI Risk Commentary",
+        "interpretation_empty": "No AI risk commentary is available for this audience.",
         "recommendations_title": "Surveillance & Research Recommendations",
         "recommendations_clinical": "Clinical Surveillance Guidance",
         "recommendations_research": "Research & Data Collection Recommendations",
         "recommendations": {
             "clinical": {
                 "High": [
-                    "Arrange contrast-enhanced CT or MRI promptly; add EUS-FNA if imaging is equivocal.",
-                    "Trend tumor markers (CA 19-9, CEA) and key metabolic/coagulation panels.",
-                    "Address pain control, nutrition, and biliary obstruction in parallel with diagnostics.",
-                    "Coordinate hepatobiliary surgery and oncology input for integrated planning.",
+                    "Discuss whether contrast-enhanced CT/MRI or EUS-FNA is clinically appropriate.",
+                    "Discuss whether additional markers such as CA 19-9 or CEA are needed.",
+                    "Review symptoms and warning signs that require urgent medical contact.",
+                    "Consider specialist referral if the full clinical context supports it.",
                 ],
                 "Moderate": [
                     "Schedule pancreatic-protocol CT or MRI within 2-4 weeks based on symptoms.",
@@ -188,9 +172,9 @@ COPY = {
             "audience": "Аудитория",
             "disclaimer": "Правовая оговорка",
         },
-        "cover_intended_use_value": "Клиническая поддержка принятия решений",
+        "cover_intended_use_value": "Поддержка оценки риска",
         "cover_disclaimer": "Поддержка решений на основе ИИ; не является диагнозом.",
-        "executive_title": "Клиническое резюме",
+        "executive_title": "Резюме оценки риска",
         "executive_summary": {
             "High": (
                 "Модель оценивает категорию {risk} с ориентировочной вероятностью {probability}%. "
@@ -232,18 +216,18 @@ COPY = {
         },
         "impact_legend": "↑ повышает вклад в риск, ↓ снижает вклад в риск, • нейтральное влияние.",
         "explainability_empty": "Данные интерпретируемости недоступны.",
-        "interpretation_title": "Клиническая интерпретация ИИ",
-        "interpretation_empty": "Клиническая интерпретация ИИ для этой аудитории недоступна.",
+        "interpretation_title": "Пояснение ИИ к оценке риска",
+        "interpretation_empty": "Пояснение ИИ для этой аудитории недоступно.",
         "recommendations_title": "Рекомендации по наблюдению и исследовательским данным",
         "recommendations_clinical": "Клиническое наблюдение",
         "recommendations_research": "Рекомендации по исследованиям и сбору данных",
         "recommendations": {
             "clinical": {
                 "High": [
-                    "Организовать контрастное КТ или МРТ в ближайшее время; при сомнительных результатах добавить ЭУС-ТАБ.",
-                    "Отслеживать опухолевые маркеры (CA 19-9, CEA) и ключевые метаболические/коагуляционные показатели.",
-                    "Параллельно с диагностикой вести контроль боли, питания и билиарной обструкции.",
-                    "Согласовать план с гепатобилиарной хирургией и онкологией.",
+                    "Обсудить, нужны ли КТ/МРТ с контрастом или ЭУС-ТАБ с учетом полной клинической картины.",
+                    "Обсудить, нужны ли дополнительные маркеры, например CA 19-9 или CEA.",
+                    "Разобрать симптомы и признаки, требующие срочного обращения за медицинской помощью.",
+                    "Рассмотреть направление к профильному специалисту, если это подтверждается клиническим контекстом.",
                 ],
                 "Moderate": [
                     "Запланировать КТ/МРТ по панкреатическому протоколу в течение 2-4 недель с учетом симптомов.",
@@ -373,24 +357,10 @@ def _build_context(
     risk_level = _normalize_risk(analysis.get("risk_level"), prob)
     risk_name = copy["risk_names"].get(risk_level, risk_level)
 
-    feature_order = [
-        "wbc",
-        "rbc",
-        "plt",
-        "hgb",
-        "hct",
-        "mpv",
-        "pdw",
-        "mono",
-        "baso_abs",
-        "baso_pct",
-        "glucose",
-        "act",
-        "bilirubin",
-    ]
+    feature_order = [key for key, _ in FEATURE_DEFAULTS]
     label_map = FEATURE_LABELS.get("en", FEATURE_LABELS["en"])
     if lang == "ru":
-        label_map = RU_LAB_LABELS
+        label_map = FEATURE_LABELS.get("ru", FEATURE_LABELS["en"])
     labs: List[Dict[str, str]] = []
     for key in feature_order:
         label = label_map.get(key.upper(), key.upper())
